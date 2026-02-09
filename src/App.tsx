@@ -5,9 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { WalletProvider } from "@/contexts/WalletContext";
 import Index from "./pages/Index";
-import Lobby from "./pages/Lobby";
-import GameScreen from "./pages/GameScreen";
-import GameOver from "./pages/GameOver";
+import TaskBoard from "./pages/TaskBoard";
+import CreateTask from "./pages/CreateTask";
+import TaskDetail from "./pages/TaskDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,9 +21,9 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/lobby" element={<Lobby />} />
-            <Route path="/game" element={<GameScreen />} />
-            <Route path="/gameover" element={<GameOver />} />
+            <Route path="/tasks" element={<TaskBoard />} />
+            <Route path="/create" element={<CreateTask />} />
+            <Route path="/task/:address" element={<TaskDetail />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
