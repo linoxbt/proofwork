@@ -1,85 +1,154 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { AsciiHeader } from '@/components/AsciiHeader';
-import { TerminalCard } from '@/components/TerminalCard';
-import { ScanlineOverlay } from '@/components/ScanlineOverlay';
+import { Header } from '@/components/Header';
+import { CodeCard } from '@/components/CodeCard';
+import { StatusBadge } from '@/components/StatusBadge';
 import { useWallet } from '@/hooks/useWallet';
+import { MOCK_TASKS } from '@/lib/gameState';
+import { Shield, GitBranch, Cpu, CheckCircle2, ArrowRight, Code2, Zap } from 'lucide-react';
 
 const Index = () => {
-  const { isConnected, isConnecting, connect, displayAddress, disconnect } = useWallet();
+  const { isConnected, connect, isConnecting } = useWallet();
   const navigate = useNavigate();
+
+  const steps = [
+    { icon: Code2, label: 'Post Task', desc: 'Define work criteria on-chain', color: 'text-primary' },
+    { icon: GitBranch, label: 'Submit Proof', desc: 'Worker submits GitHub URL', color: 'text-secondary' },
+    { icon: Cpu, label: 'AI Verifies', desc: 'Validators analyze the repo', color: 'text-accent' },
+    { icon: CheckCircle2, label: 'Consensus', desc: 'VERIFIED ✓ or REJECTED ✗', color: 'text-primary' },
+  ];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <ScanlineOverlay />
+      <Header />
 
-      <header className="border-b border-border px-4 py-3 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground font-mono">
-          GenLayer Chronicles v0.1 — Asimov Testnet
-        </span>
-        {isConnected ? (
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-primary terminal-glow">{displayAddress}</span>
-            <button onClick={disconnect} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
-              [disconnect]
-            </button>
+      {/* Hero */}
+      <section className="flex-1 flex flex-col items-center justify-center px-4 py-16 md:py-24 relative">
+        <div className="absolute inset-0 grid-bg opacity-30" />
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="relative text-center max-w-3xl mx-auto"
+        >
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/5 mb-6">
+            <Zap className="h-3 w-3 text-primary" />
+            <span className="text-xs font-mono text-primary">Powered by GenLayer Intelligent Contracts</span>
           </div>
-        ) : (
-          <button onClick={connect} disabled={isConnecting} className="terminal-button text-xs py-1 px-3">
-            {isConnecting ? 'Connecting...' : 'Connect'}
-          </button>
-        )}
-      </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 gap-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-center"
-        >
-          <AsciiHeader />
-          <p className="mt-4 text-muted-foreground text-sm max-w-lg mx-auto">
-            A multiplayer on-chain adventure where an AI Game Master narrates your story.
-            Vote with your party. Shape the narrative. All on GenLayer.
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-4">
+            <span className="text-foreground">AI-Verified</span>
+            <br />
+            <span className="text-primary glow-green">Task Completion</span>
+          </h1>
+
+          <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto mb-8 leading-relaxed">
+            Smart contracts that use AI to verify if you actually did your work.
+            No humans needed — just code and AI consensus.
           </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            {isConnected ? (
+              <>
+                <button
+                  onClick={() => navigate('/tasks')}
+                  className="px-6 py-2.5 rounded-lg bg-primary text-primary-foreground font-mono text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+                >
+                  Browse Tasks <ArrowRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => navigate('/create')}
+                  className="px-6 py-2.5 rounded-lg border border-border text-foreground font-mono text-sm hover:bg-muted transition-colors"
+                >
+                  Post a Task
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={connect}
+                disabled={isConnecting}
+                className="px-6 py-2.5 rounded-lg bg-primary text-primary-foreground font-mono text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+              >
+                <Shield className="h-4 w-4" />
+                {isConnecting ? 'Connecting...' : 'Connect Wallet to Start'}
+              </button>
+            )}
+          </div>
         </motion.div>
+      </section>
 
-        {!isConnected ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-            <button onClick={connect} disabled={isConnecting} className="terminal-button">
-              {isConnecting ? '> Connecting...' : '> Connect Wallet'}
-            </button>
-          </motion.div>
-        ) : (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="flex gap-4">
-            <button onClick={() => navigate('/lobby')} className="terminal-button">
-              {'>'} Enter Lobby
-            </button>
-          </motion.div>
-        )}
+      {/* How it works */}
+      <section className="px-4 py-16 border-t border-border">
+        <div className="max-w-4xl mx-auto">
+          <motion.h2
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center text-sm font-mono text-muted-foreground uppercase tracking-widest mb-10"
+          >
+            How It Works
+          </motion.h2>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7, duration: 0.6 }}
-          className="w-full max-w-2xl"
-        >
-          <TerminalCard title="how_it_works.md">
-            <div className="space-y-2 text-sm">
-              <p><span className="text-secondary terminal-glow-amber">1.</span> <span className="text-muted-foreground">Connect your wallet — a local GenLayer keypair is created for you</span></p>
-              <p><span className="text-secondary terminal-glow-amber">2.</span> <span className="text-muted-foreground">Create or join a session — deploys an Intelligent Contract on Asimov</span></p>
-              <p><span className="text-secondary terminal-glow-amber">3.</span> <span className="text-muted-foreground">The AI Game Master narrates a branching story via on-chain consensus</span></p>
-              <p><span className="text-secondary terminal-glow-amber">4.</span> <span className="text-muted-foreground">Vote on choices with your party — majority wins</span></p>
-              <p><span className="text-secondary terminal-glow-amber">5.</span> <span className="text-muted-foreground">Your adventure is forever recorded on GenLayer</span></p>
-            </div>
-          </TerminalCard>
-        </motion.div>
-      </main>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {steps.map((step, i) => (
+              <motion.div
+                key={step.label}
+                initial={{ opacity: 0, y: 15 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+              >
+                <CodeCard title={`step_${i + 1}`}>
+                  <div className="space-y-3">
+                    <step.icon className={`h-6 w-6 ${step.color}`} />
+                    <p className="font-mono font-semibold text-sm text-foreground">{step.label}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
+                  </div>
+                </CodeCard>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-      <footer className="border-t border-border px-4 py-3 text-center">
-        <span className="text-xs text-muted-foreground">
-          GenLayer Chronicles — Powered by Intelligent Contracts
+      {/* Recent tasks preview */}
+      <section className="px-4 py-16 border-t border-border bg-card/30">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-center text-sm font-mono text-muted-foreground uppercase tracking-widest mb-10">
+            Recent Tasks
+          </h2>
+          <div className="grid gap-3">
+            {MOCK_TASKS.slice(0, 3).map((task, i) => (
+              <motion.div
+                key={task.id}
+                initial={{ opacity: 0, x: -10 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.08 }}
+                onClick={() => navigate(`/task/${task.contractAddress}`)}
+                className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors cursor-pointer group"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                    {task.title}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">{task.description}</p>
+                </div>
+                <div className="flex items-center gap-3 ml-4 shrink-0">
+                  <span className="text-xs font-mono text-accent">{task.rewardAmount} GEN</span>
+                  <StatusBadge status={task.status} />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-border px-4 py-4 text-center">
+        <span className="text-xs text-muted-foreground font-mono">
+          TaskVerify — AI-Verified Work on GenLayer · Asimov Testnet
         </span>
       </footer>
     </div>
