@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 120 5% 3%;
+    --foreground: 120 100% 65%;
+
+    --card: 120 5% 6%;
+    --card-foreground: 120 100% 65%;
+
+    --popover: 120 5% 6%;
+    --popover-foreground: 120 100% 65%;
+
+    --primary: 120 100% 50%;
+    --primary-foreground: 120 5% 3%;
+
+    --secondary: 38 100% 50%;
+    --secondary-foreground: 38 10% 5%;
+
+    --muted: 120 5% 12%;
+    --muted-foreground: 120 30% 40%;
+
+    --accent: 38 100% 50%;
+    --accent-foreground: 38 10% 5%;
+
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 120 40% 15%;
+    --input: 120 40% 15%;
+    --ring: 120 100% 50%;
+
+    --radius: 0.25rem;
+
+    --terminal-glow: 120 100% 50%;
+    --terminal-amber: 38 100% 50%;
+    --terminal-dim: 120 30% 25%;
+
+    --sidebar-background: 120 5% 5%;
+    --sidebar-foreground: 120 100% 65%;
+    --sidebar-primary: 120 100% 50%;
+    --sidebar-primary-foreground: 120 5% 3%;
+    --sidebar-accent: 120 5% 10%;
+    --sidebar-accent-foreground: 120 100% 65%;
+    --sidebar-border: 120 40% 15%;
+    --sidebar-ring: 120 100% 50%;
+  }
+
+  .dark {
+    --background: 120 5% 3%;
+    --foreground: 120 100% 65%;
+    --card: 120 5% 6%;
+    --card-foreground: 120 100% 65%;
+    --popover: 120 5% 6%;
+    --popover-foreground: 120 100% 65%;
+    --primary: 120 100% 50%;
+    --primary-foreground: 120 5% 3%;
+    --secondary: 38 100% 50%;
+    --secondary-foreground: 38 10% 5%;
+    --muted: 120 5% 12%;
+    --muted-foreground: 120 30% 40%;
+    --accent: 38 100% 50%;
+    --accent-foreground: 38 10% 5%;
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 120 40% 15%;
+    --input: 120 40% 15%;
+    --ring: 120 100% 50%;
+    --sidebar-background: 120 5% 5%;
+    --sidebar-foreground: 120 100% 65%;
+    --sidebar-primary: 120 100% 50%;
+    --sidebar-primary-foreground: 120 5% 3%;
+    --sidebar-accent: 120 5% 10%;
+    --sidebar-accent-foreground: 120 100% 65%;
+    --sidebar-border: 120 40% 15%;
+    --sidebar-ring: 120 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-mono;
+    font-family: 'JetBrains Mono', 'Share Tech Mono', monospace;
+  }
+}
+
+@layer components {
+  .scanline-overlay {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(120 100% 50% / 0.03) 2px,
+      hsl(120 100% 50% / 0.03) 4px
+    );
+  }
+
+  .terminal-glow {
+    text-shadow: 0 0 5px hsl(var(--terminal-glow) / 0.7),
+                 0 0 10px hsl(var(--terminal-glow) / 0.4),
+                 0 0 20px hsl(var(--terminal-glow) / 0.2);
+  }
+
+  .terminal-glow-amber {
+    text-shadow: 0 0 5px hsl(var(--terminal-amber) / 0.7),
+                 0 0 10px hsl(var(--terminal-amber) / 0.4),
+                 0 0 20px hsl(var(--terminal-amber) / 0.2);
+  }
+
+  .terminal-card {
+    @apply bg-card border border-border rounded-sm;
+    box-shadow: 0 0 10px hsl(var(--terminal-glow) / 0.1),
+                inset 0 0 30px hsl(120 5% 0% / 0.5);
+  }
+
+  .terminal-button {
+    @apply border border-primary bg-transparent text-primary font-mono uppercase tracking-widest text-sm px-6 py-3;
+    text-shadow: 0 0 5px hsl(var(--terminal-glow) / 0.5);
+    box-shadow: 0 0 5px hsl(var(--terminal-glow) / 0.2),
+                inset 0 0 5px hsl(var(--terminal-glow) / 0.1);
+    transition: all 0.2s;
+  }
+
+  .terminal-button:hover {
+    @apply bg-primary text-primary-foreground;
+    box-shadow: 0 0 15px hsl(var(--terminal-glow) / 0.4),
+                inset 0 0 10px hsl(var(--terminal-glow) / 0.2);
+  }
+
+  .blink-cursor::after {
+    content: '█';
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  @keyframes typewriter {
+    from { width: 0; }
+    to { width: 100%; }
+  }
+}
