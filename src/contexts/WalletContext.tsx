@@ -105,17 +105,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     const detected = detectProviders();
-    if (detected.length === 0) {
-      window.open('https://ethereum.org/en/wallets/', '_blank');
-      return;
-    }
-    if (detected.length === 1) {
-      await connectWithProvider(detected[0]);
-      return;
-    }
     setPendingProviders(detected);
     setPickerOpen(true);
-  }, [connectWithProvider]);
+  }, []);
 
   const disconnect = useCallback(() => {
     setAddress(''); setClient(null); setProviderName(''); setActiveProvider(null);
