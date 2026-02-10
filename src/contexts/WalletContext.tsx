@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { createClient } from 'genlayer-js';
 import { testnetAsimov } from 'genlayer-js/chains';
+import { WalletPickerModal } from '@/components/WalletPickerModal';
 
 interface WalletContextType {
   address: string;
@@ -24,41 +25,27 @@ function truncateAddress(address: string) {
 interface DetectedProvider {
   name: string;
   provider: any;
-  icon?: string;
 }
 
 function detectProviders(): DetectedProvider[] {
   if (typeof window === 'undefined') return [];
-
-  const providers: DetectedProvider[] = [];
   const ethereum = (window as any).ethereum;
   if (!ethereum) return [];
 
-  // EIP-6963: check for multiple injected providers
+  const identify = (p: any): string =>
+    p.isMetaMask ? 'MetaMask'
+    : p.isCoinbaseWallet ? 'Coinbase Wallet'
+    : p.isBraveWallet ? 'Brave Wallet'
+    : p.isTrust ? 'Trust Wallet'
+    : p.isRabby ? 'Rabby'
+    : p.isPhantom ? 'Phantom'
+    : 'Browser Wallet';
+
   if (ethereum.providers && Array.isArray(ethereum.providers)) {
-    for (const p of ethereum.providers) {
-      const name = p.isMetaMask ? 'MetaMask'
-        : p.isCoinbaseWallet ? 'Coinbase Wallet'
-        : p.isBraveWallet ? 'Brave Wallet'
-        : p.isTrust ? 'Trust Wallet'
-        : p.isRabby ? 'Rabby'
-        : p.isPhantom ? 'Phantom'
-        : 'Wallet';
-      providers.push({ name, provider: p });
-    }
-    return providers;
+    return ethereum.providers.map((p: any) => ({ name: identify(p), provider: p }));
   }
 
-  // Single provider fallback
-  const name = ethereum.isMetaMask ? 'MetaMask'
-    : ethereum.isCoinbaseWallet ? 'Coinbase Wallet'
-    : ethereum.isBraveWallet ? 'Brave Wallet'
-    : ethereum.isTrust ? 'Trust Wallet'
-    : ethereum.isRabby ? 'Rabby'
-    : ethereum.isPhantom ? 'Phantom'
-    : 'Browser Wallet';
-  providers.push({ name, provider: ethereum });
-  return providers;
+  return [{ name: identify(ethereum), provider: ethereum }];
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -67,45 +54,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [providerName, setProviderName] = useState('');
   const [activeProvider, setActiveProvider] = useState<any>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingProviders, setPendingProviders] = useState<DetectedProvider[]>([]);
 
   const buildClient = useCallback((addr: string) => {
-    return createClient({
-      chain: testnetAsimov,
-      account: addr as `0x${string}`,
-    });
+    return createClient({ chain: testnetAsimov, account: addr as `0x${string}` });
   }, []);
 
-  // Listen for account/chain changes on the active provider
   useEffect(() => {
     const provider = activeProvider || (typeof window !== 'undefined' ? (window as any).ethereum : null);
     if (!provider) return;
 
     const handleAccountsChanged = (accounts: string[]) => {
       if (accounts.length === 0) {
-        setAddress('');
-        setClient(null);
-        setProviderName('');
+        setAddress(''); setClient(null); setProviderName('');
       } else {
-        const addr = accounts[0];
-        setAddress(addr);
-        setClient(buildClient(addr));
+        setAddress(accounts[0]); setClient(buildClient(accounts[0]));
       }
     };
-
-    const handleChainChanged = () => {
-      window.location.reload();
-    };
+    const handleChainChanged = () => window.location.reload();
 
     provider.on?.('accountsChanged', handleAccountsChanged);
     provider.on?.('chainChanged', handleChainChanged);
-
-    // Check if already connected
     provider.request?.({ method: 'eth_accounts' }).then((accounts: string[]) => {
-      if (accounts.length > 0) {
-        const addr = accounts[0];
-        setAddress(addr);
-        setClient(buildClient(addr));
-      }
+      if (accounts.length > 0) { setAddress(accounts[0]); setClient(buildClient(accounts[0])); }
     }).catch(() => {});
 
     return () => {
@@ -114,18 +86,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
   }, [buildClient, activeProvider]);
 
-  const connectWithProvider = useCallback(async (provider: any, name: string) => {
+  const connectWithProvider = useCallback(async (detected: DetectedProvider) => {
     setIsConnecting(true);
     try {
-      const accounts: string[] = await provider.request({
-        method: 'eth_requestAccounts',
-      });
+      const accounts: string[] = await detected.provider.request({ method: 'eth_requestAccounts' });
       if (accounts.length > 0) {
-        const addr = accounts[0];
-        setAddress(addr);
-        setClient(buildClient(addr));
-        setActiveProvider(provider);
-        setProviderName(name);
+        setAddress(accounts[0]);
+        setClient(buildClient(accounts[0]));
+        setActiveProvider(detected.provider);
+        setProviderName(detected.name);
       }
     } catch (err) {
       console.error('Wallet connection failed:', err);
@@ -136,47 +105,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     const detected = detectProviders();
-
     if (detected.length === 0) {
-      // No wallet found — open a helpful page
       window.open('https://ethereum.org/en/wallets/', '_blank');
       return;
     }
-
     if (detected.length === 1) {
-      await connectWithProvider(detected[0].provider, detected[0].name);
+      await connectWithProvider(detected[0]);
       return;
     }
-
-    // Multiple wallets: let user pick via simple prompt
-    // In a production app you'd use a modal, but this works for all EVM wallets
-    const names = detected.map((d, i) => `${i + 1}. ${d.name}`).join('\n');
-    const choice = window.prompt(`Multiple wallets detected. Enter number:\n\n${names}`);
-    if (choice) {
-      const idx = parseInt(choice) - 1;
-      if (idx >= 0 && idx < detected.length) {
-        await connectWithProvider(detected[idx].provider, detected[idx].name);
-      }
-    }
+    setPendingProviders(detected);
+    setPickerOpen(true);
   }, [connectWithProvider]);
 
   const disconnect = useCallback(() => {
-    setAddress('');
-    setClient(null);
-    setProviderName('');
-    setActiveProvider(null);
+    setAddress(''); setClient(null); setProviderName(''); setActiveProvider(null);
   }, []);
-
-  const isConnected = !!address;
-  const displayAddress = address ? truncateAddress(address) : '';
 
   return (
     <WalletContext.Provider
       value={{
         address,
-        displayAddress,
+        displayAddress: address ? truncateAddress(address) : '',
         client,
-        isConnected,
+        isConnected: !!address,
         isConnecting,
         connect,
         disconnect,
@@ -185,6 +136,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      <WalletPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        providers={pendingProviders}
+        onSelect={(p) => connectWithProvider(p)}
+      />
     </WalletContext.Provider>
   );
 }
