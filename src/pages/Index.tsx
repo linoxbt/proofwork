@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { CodeCard } from '@/components/CodeCard';
 import { StatusBadge } from '@/components/StatusBadge';
+import { GenLayerExplainer } from '@/components/GenLayerExplainer';
 import { useWallet } from '@/hooks/useWallet';
 import { MOCK_TASKS } from '@/lib/gameState';
 import { Shield, GitBranch, Cpu, CheckCircle2, ArrowRight, Code2, Zap } from 'lucide-react';
@@ -40,12 +41,12 @@ const Index = () => {
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-4">
             <span className="text-foreground">AI-Verified</span>
             <br />
-            <span className="text-primary glow-green">Task Completion</span>
+            <span className="text-primary glow-green">Proof of Work</span>
           </h1>
 
           <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto mb-8 leading-relaxed">
-            Smart contracts that use AI to verify if you actually did your work.
-            No humans needed — just code and AI consensus.
+            Smart contracts that use AI consensus to verify if you actually did your work.
+            No humans needed — just code and decentralized AI validators.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -78,7 +79,7 @@ const Index = () => {
         </motion.div>
       </section>
 
-      {/* How it works */}
+      {/* How it works — steps */}
       <section className="px-4 py-16 border-t border-border">
         <div className="max-w-4xl mx-auto">
           <motion.h2
@@ -111,6 +112,9 @@ const Index = () => {
           </div>
         </div>
       </section>
+
+      {/* GenLayer Deep Dive */}
+      <GenLayerExplainer />
 
       {/* Recent tasks preview */}
       <section className="px-4 py-16 border-t border-border bg-card/30">
@@ -147,9 +151,12 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="border-t border-border px-4 py-4 text-center">
-        <span className="text-xs text-muted-foreground font-mono">
-          TaskVerify — AI-Verified Work on GenLayer · Asimov Testnet
-        </span>
+        <div className="flex items-center justify-center gap-2">
+          <img src="/logo.png" alt="ProofWork" className="h-4 w-4 rounded-sm" />
+          <span className="text-xs text-muted-foreground font-mono">
+            ProofWork — AI-Verified Task Completion on <a href="https://genlayer.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GenLayer</a> · Asimov Testnet
+          </span>
+        </div>
       </footer>
     </div>
   );

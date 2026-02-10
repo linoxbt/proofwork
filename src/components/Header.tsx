@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/hooks/useWallet';
-import { Shield } from 'lucide-react';
 
 export function Header() {
   const navigate = useNavigate();
@@ -8,11 +7,11 @@ export function Header() {
 
   return (
     <header className="border-b border-border px-4 md:px-6 py-3 flex items-center justify-between bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-      <button onClick={() => navigate('/')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-        <Shield className="h-5 w-5 text-primary" />
+      <button onClick={() => navigate('/')} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+        <img src="/logo.png" alt="ProofWork" className="h-7 w-7 rounded-md" />
         <span className="font-mono font-semibold text-sm tracking-tight">
-          <span className="text-primary glow-green">Task</span>
-          <span className="text-foreground">Verify</span>
+          <span className="text-primary glow-green">Proof</span>
+          <span className="text-foreground">Work</span>
         </span>
       </button>
 
