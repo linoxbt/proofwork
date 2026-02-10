@@ -150,13 +150,19 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border px-4 py-4 text-center">
+      <footer className="border-t border-border px-4 py-6 text-center space-y-2">
         <div className="flex items-center justify-center gap-2">
           <img src="/logo.png" alt="ProofWork" className="h-4 w-4 rounded-sm" />
           <span className="text-xs text-muted-foreground font-mono">
             ProofWork — AI-Verified Task Completion on <a href="https://genlayer.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GenLayer</a> · Asimov Testnet
           </span>
         </div>
+        <p className="text-xs text-muted-foreground font-mono">
+          Made by{' '}
+          <a href="https://x.com/linoxbt" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+            Lino
+          </a>
+        </p>
       </footer>
     </div>
   );
