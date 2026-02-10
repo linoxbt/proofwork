@@ -4,11 +4,12 @@ import { motion } from 'framer-motion';
 import { Header } from '@/components/Header';
 import { CodeCard } from '@/components/CodeCard';
 import { StatusBadge } from '@/components/StatusBadge';
+import { VerificationProgress } from '@/components/VerificationProgress';
 import { useWallet } from '@/hooks/useWallet';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { MOCK_TASKS, type MockTask } from '@/lib/gameState';
-import { claimTask, submitWork, getTaskState, type ContractTaskState, type VerificationResult } from '@/lib/contract';
+import { claimTask, submitWork, type VerificationResult } from '@/lib/contract';
 import { CheckCircle2, XCircle, ExternalLink, GitBranch, Cpu, User, ArrowLeft } from 'lucide-react';
 
 const TaskDetail = () => {
@@ -18,8 +19,8 @@ const TaskDetail = () => {
   const [githubUrl, setGithubUrl] = useState('');
   const [claiming, setClaiming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showVerification, setShowVerification] = useState(false);
 
-  // Use mock data for now — in production, poll getTaskState
   const mockTask = MOCK_TASKS.find((t) => t.contractAddress === contractAddr);
   const [task, setTask] = useState<MockTask | null>(mockTask || null);
 
@@ -29,6 +30,14 @@ const TaskDetail = () => {
   const isWorker = task && address && task.worker.toLowerCase().includes(address.slice(2, 6).toLowerCase());
   const canClaim = task?.status === 'open' && isConnected && !isCreator;
   const canSubmit = task?.status === 'claimed' && isConnected && isWorker;
+
+  // Auto-trigger verification animation for submitted/verified/rejected tasks
+  useEffect(() => {
+    if (task && (task.status === 'submitted' || task.status === 'verified' || task.status === 'rejected')) {
+      const timer = setTimeout(() => setShowVerification(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [task]);
 
   const handleClaim = useCallback(async () => {
     if (!client || !contractAddr) return;
@@ -51,6 +60,7 @@ const TaskDetail = () => {
       await submitWork(client, contractAddr, githubUrl);
       toast.success('Work submitted! AI verification in progress...');
       setTask((prev) => prev ? { ...prev, status: 'submitted', submissionUrl: githubUrl } : prev);
+      setShowVerification(true);
     } catch (err: any) {
       toast.error(`Submit failed: ${err.message}`);
     } finally {
@@ -154,7 +164,17 @@ const TaskDetail = () => {
             </CodeCard>
           )}
 
-          {/* Verification result */}
+          {/* Verification animation */}
+          {showVerification && (
+            <CodeCard title="ai_verification.log" variant="blue">
+              <VerificationProgress
+                isActive={showVerification}
+                result={verification}
+              />
+            </CodeCard>
+          )}
+
+          {/* Verification result details */}
           {verification && (
             <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
               <CodeCard title="verification_result.json" variant={verification.verified ? 'default' : 'blue'}>
@@ -197,7 +217,7 @@ const TaskDetail = () => {
             </motion.div>
           )}
 
-          {task.status === 'submitted' && !verification && (
+          {task.status === 'submitted' && !verification && !showVerification && (
             <CodeCard title="verifying...">
               <div className="flex items-center gap-3 py-2">
                 <Cpu className="h-5 w-5 text-secondary animate-pulse-glow" />
