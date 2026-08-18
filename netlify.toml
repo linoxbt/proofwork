@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Client-side routing (React Router) — serve index.html for any path so
+# direct loads and refreshes on routes like /create or /task/:address work.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

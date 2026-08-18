@@ -22,6 +22,16 @@ import {
 import { CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins, ScanSearch, Gavel } from 'lucide-react';
 import { format } from 'date-fns';
 
+// Tasks deployed before the `deadline` field existed on-chain read back as
+// undefined/0, which produces an Invalid Date and throws in date-fns's
+// format() — guard against that instead of crashing the whole page.
+function formatDeadline(deadline: number | undefined): string {
+  if (!deadline || !Number.isFinite(deadline)) return 'No deadline set';
+  const date = new Date(deadline * 1000);
+  if (Number.isNaN(date.getTime())) return 'No deadline set';
+  return format(date, 'MMM d, yyyy');
+}
+
 const TaskDetail = () => {
   const { address: contractAddr } = useParams();
   const navigate = useNavigate();
@@ -158,7 +168,7 @@ const TaskDetail = () => {
         <PanelRow label="Status" value={<StatusBadge status={task.status} />} />
         <PanelRow label="Category" value={task.category || '—'} />
         <PanelRow label="Reward" value={`${task.reward_amount} GEN`} />
-        <PanelRow label="Deadline" value={format(new Date(task.deadline * 1000), 'MMM d, yyyy')} />
+        <PanelRow label="Deadline" value={formatDeadline(task.deadline)} />
         <PanelRow label="Creator" value={`${task.creator.slice(0, 6)}…${task.creator.slice(-4)}`} />
         <PanelRow label="Worker" value={task.worker ? `${task.worker.slice(0, 6)}…${task.worker.slice(-4)}` : '—'} />
       </PanelSection>
