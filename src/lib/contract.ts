@@ -1,6 +1,18 @@
+import { createClient } from 'genlayer-js';
+import { testnetAsimov } from 'genlayer-js/chains';
 import { TransactionStatus } from 'genlayer-js/types';
 
 // Contract interaction helpers for the TaskVerifier Intelligent Contract
+
+let readOnlyClient: any = null;
+
+// Client for reads that don't require a connected wallet (e.g. browsing the task board)
+export function getReadOnlyClient() {
+  if (!readOnlyClient) {
+    readOnlyClient = createClient({ chain: testnetAsimov });
+  }
+  return readOnlyClient;
+}
 
 export interface ContractTaskState {
   creator: string;
@@ -34,7 +46,6 @@ export async function deployTaskContract(
   criteria: string,
   rewardAmount: number
 ): Promise<string> {
-  await client.initializeConsensusSmartContract();
   const txHash = await client.deployContract({
     code: contractCode,
     args: [title, description, criteria, rewardAmount],
@@ -44,7 +55,7 @@ export async function deployTaskContract(
     hash: txHash,
     ...TX_WAIT_OPTIONS,
   });
-  return receipt.data?.contract_address ?? '';
+  return receipt.txDataDecoded?.contractAddress ?? receipt.data?.contract_address ?? '';
 }
 
 export async function claimTask(client: any, contractAddress: string): Promise<string> {
@@ -90,5 +101,6 @@ export async function getTaskState(client: any, contractAddress: string): Promis
     functionName: 'get_task_state',
     args: [],
   });
-  return result as ContractTaskState;
+  // reward_amount is a u256 on-chain and may come back as a bigint
+  return { ...result, reward_amount: Number(result.reward_amount) } as ContractTaskState;
 }

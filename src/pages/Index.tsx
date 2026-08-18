@@ -5,11 +5,12 @@ import { CodeCard } from '@/components/CodeCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { GenLayerExplainer } from '@/components/GenLayerExplainer';
 import { useWallet } from '@/hooks/useWallet';
-import { MOCK_TASKS } from '@/lib/gameState';
+import { useTasks } from '@/hooks/useTasks';
 import { Shield, GitBranch, Cpu, CheckCircle2, ArrowRight, Code2, Zap } from 'lucide-react';
 
 const Index = () => {
   const { isConnected, connect, isConnecting } = useWallet();
+  const { tasks } = useTasks();
   const navigate = useNavigate();
 
   const steps = [
@@ -117,37 +118,39 @@ const Index = () => {
       <GenLayerExplainer />
 
       {/* Recent tasks preview */}
-      <section className="px-4 py-16 border-t border-border bg-card/30">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-center text-sm font-mono text-muted-foreground uppercase tracking-widest mb-10">
-            Recent Tasks
-          </h2>
-          <div className="grid gap-3">
-            {MOCK_TASKS.slice(0, 3).map((task, i) => (
-              <motion.div
-                key={task.id}
-                initial={{ opacity: 0, x: -10 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.08 }}
-                onClick={() => navigate(`/task/${task.contractAddress}`)}
-                className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors cursor-pointer group"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                    {task.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1 truncate">{task.description}</p>
-                </div>
-                <div className="flex items-center gap-3 ml-4 shrink-0">
-                  <span className="text-xs font-mono text-accent">{task.rewardAmount} GEN</span>
-                  <StatusBadge status={task.status} />
-                </div>
-              </motion.div>
-            ))}
+      {tasks.length > 0 && (
+        <section className="px-4 py-16 border-t border-border bg-card/30">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-center text-sm font-mono text-muted-foreground uppercase tracking-widest mb-10">
+              Recent Tasks
+            </h2>
+            <div className="grid gap-3">
+              {tasks.slice(0, 3).map((task, i) => (
+                <motion.div
+                  key={task.contractAddress}
+                  initial={{ opacity: 0, x: -10 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.08 }}
+                  onClick={() => navigate(`/task/${task.contractAddress}`)}
+                  className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors cursor-pointer group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                      {task.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">{task.description}</p>
+                  </div>
+                  <div className="flex items-center gap-3 ml-4 shrink-0">
+                    <span className="text-xs font-mono text-accent">{task.reward_amount} GEN</span>
+                    <StatusBadge status={task.status} />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-border px-4 py-6 text-center space-y-2">

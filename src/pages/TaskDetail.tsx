@@ -8,8 +8,14 @@ import { VerificationProgress } from '@/components/VerificationProgress';
 import { useWallet } from '@/hooks/useWallet';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { MOCK_TASKS, type MockTask } from '@/lib/gameState';
-import { claimTask, submitWork, type VerificationResult } from '@/lib/contract';
+import {
+  claimTask,
+  submitWork,
+  getTaskState,
+  getReadOnlyClient,
+  type ContractTaskState,
+  type VerificationResult,
+} from '@/lib/contract';
 import { CheckCircle2, XCircle, ExternalLink, GitBranch, Cpu, User, ArrowLeft } from 'lucide-react';
 
 const TaskDetail = () => {
@@ -20,14 +26,31 @@ const TaskDetail = () => {
   const [claiming, setClaiming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
+  const [task, setTask] = useState<ContractTaskState | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const mockTask = MOCK_TASKS.find((t) => t.contractAddress === contractAddr);
-  const [task, setTask] = useState<MockTask | null>(mockTask || null);
+  const refresh = useCallback(async () => {
+    if (!contractAddr) return;
+    try {
+      const state = await getTaskState(client ?? getReadOnlyClient(), contractAddr);
+      setTask(state);
+    } catch {
+      setTask(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [contractAddr, client]);
 
-  const verification: VerificationResult | null = task?.verificationResult || null;
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  const isCreator = task && address && task.creator.toLowerCase().includes(address.slice(2, 6).toLowerCase());
-  const isWorker = task && address && task.worker.toLowerCase().includes(address.slice(2, 6).toLowerCase());
+  const verification: VerificationResult | null = task?.verification_result
+    ? JSON.parse(task.verification_result)
+    : null;
+
+  const isCreator = !!(task && address && task.creator.toLowerCase() === address.toLowerCase());
+  const isWorker = !!(task && address && task.worker.toLowerCase() === address.toLowerCase());
   const canClaim = task?.status === 'open' && isConnected && !isCreator;
   const canSubmit = task?.status === 'claimed' && isConnected && isWorker;
 
@@ -45,28 +68,40 @@ const TaskDetail = () => {
     try {
       await claimTask(client, contractAddr);
       toast.success('Task claimed!');
-      setTask((prev) => prev ? { ...prev, status: 'claimed', worker: address } : prev);
+      await refresh();
     } catch (err: any) {
       toast.error(`Claim failed: ${err.message}`);
     } finally {
       setClaiming(false);
     }
-  }, [client, contractAddr, address]);
+  }, [client, contractAddr, refresh]);
 
   const handleSubmit = useCallback(async () => {
     if (!client || !contractAddr || !githubUrl) return;
     setSubmitting(true);
     try {
+      toast.info('Submitting work — AI validators will fetch and analyze the repo, this can take a minute...');
       await submitWork(client, contractAddr, githubUrl);
-      toast.success('Work submitted! AI verification in progress...');
-      setTask((prev) => prev ? { ...prev, status: 'submitted', submissionUrl: githubUrl } : prev);
+      toast.success('AI verification complete!');
       setShowVerification(true);
+      await refresh();
     } catch (err: any) {
       toast.error(`Submit failed: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
-  }, [client, contractAddr, githubUrl]);
+  }, [client, contractAddr, githubUrl, refresh]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground text-sm font-mono">Loading task from chain...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!task) {
     return (
@@ -102,7 +137,7 @@ const TaskDetail = () => {
               <h1 className="font-mono text-lg font-bold text-foreground">{task.title}</h1>
               <div className="flex items-center gap-3 mt-2">
                 <StatusBadge status={task.status} />
-                <span className="text-xs font-mono text-accent font-medium">{task.rewardAmount} GEN</span>
+                <span className="text-xs font-mono text-accent font-medium">{task.reward_amount} GEN</span>
               </div>
             </div>
           </div>
@@ -202,14 +237,14 @@ const TaskDetail = () => {
                     <p className="text-sm text-foreground/80 leading-relaxed">{verification.reasoning}</p>
                   </div>
 
-                  {task.submissionUrl && (
+                  {task.submission_url && (
                     <a
-                      href={task.submissionUrl}
+                      href={task.submission_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1.5 text-xs text-secondary hover:underline font-mono"
                     >
-                      <ExternalLink className="h-3 w-3" /> {task.submissionUrl}
+                      <ExternalLink className="h-3 w-3" /> {task.submission_url}
                     </a>
                   )}
                 </div>

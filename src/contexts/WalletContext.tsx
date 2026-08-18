@@ -57,8 +57,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingProviders, setPendingProviders] = useState<DetectedProvider[]>([]);
 
-  const buildClient = useCallback((addr: string) => {
-    return createClient({ chain: testnetAsimov, account: addr as `0x${string}` });
+  const buildClient = useCallback((addr: string, provider: any) => {
+    // provider is required so writes are signed through the connected browser wallet
+    const c = createClient({ chain: testnetAsimov, account: addr as `0x${string}`, provider });
+    // Switches (or prompts to add) the wallet's active chain to GenLayer Asimov Testnet.
+    // Required before writeContract/deployContract will work through a browser wallet.
+    c.connect('testnetAsimov').catch((err: any) =>
+      console.error('Failed to switch wallet to GenLayer Asimov Testnet:', err)
+    );
+    return c;
   }, []);
 
   useEffect(() => {
@@ -69,7 +76,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (accounts.length === 0) {
         setAddress(''); setClient(null); setProviderName('');
       } else {
-        setAddress(accounts[0]); setClient(buildClient(accounts[0]));
+        setAddress(accounts[0]); setClient(buildClient(accounts[0], provider));
       }
     };
     const handleChainChanged = () => window.location.reload();
@@ -77,7 +84,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     provider.on?.('accountsChanged', handleAccountsChanged);
     provider.on?.('chainChanged', handleChainChanged);
     provider.request?.({ method: 'eth_accounts' }).then((accounts: string[]) => {
-      if (accounts.length > 0) { setAddress(accounts[0]); setClient(buildClient(accounts[0])); }
+      if (accounts.length > 0) { setAddress(accounts[0]); setClient(buildClient(accounts[0], provider)); }
     }).catch(() => {});
 
     return () => {
@@ -92,7 +99,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const accounts: string[] = await detected.provider.request({ method: 'eth_requestAccounts' });
       if (accounts.length > 0) {
         setAddress(accounts[0]);
-        setClient(buildClient(accounts[0]));
+        setClient(buildClient(accounts[0], detected.provider));
         setActiveProvider(detected.provider);
         setProviderName(detected.name);
       }

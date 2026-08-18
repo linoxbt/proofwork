@@ -5,9 +5,11 @@ import { Header } from '@/components/Header';
 import { CodeCard } from '@/components/CodeCard';
 import { useWallet } from '@/hooks/useWallet';
 import { deployTaskContract } from '@/lib/contract';
+import { registerTask } from '@/lib/taskRegistry';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import taskVerifierCode from '../../contracts/task_verifier.py?raw';
 
 const CreateTask = () => {
   const navigate = useNavigate();
@@ -25,12 +27,9 @@ const CreateTask = () => {
     }
     setDeploying(true);
     try {
-      const resp = await fetch('/contracts/task_verifier.py');
-      if (!resp.ok) throw new Error('Failed to load contract code');
-      const code = await resp.text();
-
       toast.info('Deploying contract to Asimov testnet...');
-      const addr = await deployTaskContract(client, code, title, description, criteria, parseInt(reward) || 100);
+      const addr = await deployTaskContract(client, taskVerifierCode, title, description, criteria, parseInt(reward) || 100);
+      registerTask(addr);
       toast.success('Task deployed on-chain!');
       navigate(`/task/${addr}`);
     } catch (err: any) {

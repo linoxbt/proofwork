@@ -2,17 +2,18 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { StatusBadge } from '@/components/StatusBadge';
-import { MOCK_TASKS } from '@/lib/gameState';
+import { useTasks } from '@/hooks/useTasks';
 import { Input } from '@/components/ui/input';
 import { useState } from 'react';
 import { Search } from 'lucide-react';
 
 const TaskBoard = () => {
   const navigate = useNavigate();
+  const { tasks, loading } = useTasks();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<string>('all');
 
-  const filtered = MOCK_TASKS.filter((t) => {
+  const filtered = tasks.filter((t) => {
     if (filter !== 'all' && t.status !== filter) return false;
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -56,40 +57,51 @@ const TaskBoard = () => {
         </div>
 
         <div className="grid gap-3">
-          {filtered.map((task, i) => (
-            <motion.div
-              key={task.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              onClick={() => navigate(`/task/${task.contractAddress}`)}
-              className="p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-all cursor-pointer group"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-mono text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                      {task.title}
-                    </p>
-                  </div>
-                  <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      by {task.creator}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                  <StatusBadge status={task.status} />
-                  <span className="text-xs font-mono text-accent font-medium">{task.rewardAmount} GEN</span>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-
-          {filtered.length === 0 && (
+          {loading && (
             <div className="text-center py-12 text-muted-foreground text-sm font-mono">
-              No tasks found.
+              Loading tasks from chain...
+            </div>
+          )}
+
+          {!loading &&
+            filtered.map((task, i) => (
+              <motion.div
+                key={task.contractAddress}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                onClick={() => navigate(`/task/${task.contractAddress}`)}
+                className="p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-all cursor-pointer group"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-mono text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                        {task.title}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <span className="text-[10px] font-mono text-muted-foreground">
+                        by {task.creator}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <StatusBadge status={task.status} />
+                    <span className="text-xs font-mono text-accent font-medium">{task.reward_amount} GEN</span>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+
+          {!loading && filtered.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground text-sm font-mono">
+              {tasks.length === 0 ? (
+                <>No tasks yet — <button onClick={() => navigate('/create')} className="text-primary hover:underline">create one</button>.</>
+              ) : (
+                'No tasks found.'
+              )}
             </div>
           )}
         </div>
