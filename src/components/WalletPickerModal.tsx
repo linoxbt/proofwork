@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { Wallet, ExternalLink, Loader2 } from 'lucide-react';
+import { Wallet, ExternalLink, Loader2, QrCode } from 'lucide-react';
 
 interface DetectedProvider {
   name: string;
@@ -13,6 +13,8 @@ interface WalletPickerModalProps {
   onClose: () => void;
   providers: DetectedProvider[];
   onSelect: (provider: DetectedProvider) => void;
+  showReown?: boolean;
+  onSelectReown?: () => void;
 }
 
 const WALLET_META: Record<string, { icon: string; color: string }> = {
@@ -25,12 +27,17 @@ const WALLET_META: Record<string, { icon: string; color: string }> = {
   'Browser Wallet': { icon: '🌐', color: 'hover:border-primary/30' },
 };
 
-export function WalletPickerModal({ open, onClose, providers, onSelect }: WalletPickerModalProps) {
+export function WalletPickerModal({ open, onClose, providers, onSelect, showReown, onSelectReown }: WalletPickerModalProps) {
   const [connecting, setConnecting] = useState<string | null>(null);
 
   const handleSelect = (p: DetectedProvider) => {
     setConnecting(p.name);
     onSelect(p);
+  };
+
+  const handleSelectReown = () => {
+    setConnecting('reown');
+    onSelectReown?.();
   };
 
   const handleClose = () => {
@@ -54,36 +61,61 @@ export function WalletPickerModal({ open, onClose, providers, onSelect }: Wallet
         </div>
 
         <div className="px-3 pb-3 space-y-1.5">
-          {providers.length > 0 ? (
-            providers.map((p, i) => {
-              const meta = WALLET_META[p.name] || { icon: '💳', color: 'hover:border-primary/30' };
-              const isConnecting = connecting === p.name;
-              return (
-                <button
-                  key={i}
-                  onClick={() => handleSelect(p)}
-                  disabled={!!connecting}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-border',
-                    'bg-background hover:bg-muted/40 transition-all duration-150',
-                    'text-left group cursor-pointer disabled:opacity-50 disabled:cursor-wait',
-                    meta.color
-                  )}
-                >
-                  <span className="text-2xl w-9 text-center shrink-0">{meta.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground">Detected</p>
-                  </div>
-                  {isConnecting ? (
-                    <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                  ) : (
-                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">→</span>
-                  )}
-                </button>
-              );
-            })
-          ) : (
+          {providers.map((p, i) => {
+            const meta = WALLET_META[p.name] || { icon: '💳', color: 'hover:border-primary/30' };
+            const isConnecting = connecting === p.name;
+            return (
+              <button
+                key={i}
+                onClick={() => handleSelect(p)}
+                disabled={!!connecting}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-border',
+                  'bg-background hover:bg-muted/40 transition-all duration-150',
+                  'text-left group cursor-pointer disabled:opacity-50 disabled:cursor-wait',
+                  meta.color
+                )}
+              >
+                <span className="text-2xl w-9 text-center shrink-0">{meta.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{p.name}</p>
+                  <p className="text-[10px] text-muted-foreground">Detected</p>
+                </div>
+                {isConnecting ? (
+                  <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                ) : (
+                  <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">→</span>
+                )}
+              </button>
+            );
+          })}
+
+          {showReown && (
+            <button
+              onClick={handleSelectReown}
+              disabled={!!connecting}
+              className={cn(
+                'w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-border',
+                'bg-background hover:bg-muted/40 transition-all duration-150 hover:border-secondary/40',
+                'text-left group cursor-pointer disabled:opacity-50 disabled:cursor-wait'
+              )}
+            >
+              <span className="h-9 w-9 rounded-lg bg-secondary/15 text-secondary flex items-center justify-center shrink-0">
+                <QrCode className="h-4.5 w-4.5" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground">WalletConnect</p>
+                <p className="text-[10px] text-muted-foreground">Scan with a mobile wallet</p>
+              </div>
+              {connecting === 'reown' ? (
+                <Loader2 className="h-4 w-4 text-primary animate-spin" />
+              ) : (
+                <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">→</span>
+              )}
+            </button>
+          )}
+
+          {providers.length === 0 && !showReown && (
             <div className="text-center py-6 space-y-3">
               <p className="text-sm text-muted-foreground">No wallet detected</p>
               <p className="text-xs text-muted-foreground leading-relaxed px-4">

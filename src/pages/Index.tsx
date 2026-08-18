@@ -28,31 +28,35 @@ const Board = () => {
   return (
     <AppShell
       toolbar={
-        <>
-          <div className="relative w-56">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search tasks…"
-              className="w-full h-7 pl-7 pr-2 rounded-[4px] bg-background border border-border text-xs
-                         text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-56">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search tasks…"
+                className="w-full h-7 pl-7 pr-2 rounded-[4px] bg-background border border-border text-xs
+                           text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <button onClick={() => navigate('/create')} className="tool-btn-primary sm:hidden">
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
-          <div className="w-px h-4 bg-border mx-1" />
-          <div className="flex items-center gap-0.5">
+          <div className="hidden sm:block w-px h-4 bg-border" />
+          <div className="flex items-center gap-0.5 overflow-x-auto sm:flex-1 -mx-1 px-1 sm:mx-0 sm:px-0">
             {FILTERS.map((f) => (
               <button key={f} data-active={filter === f} onClick={() => setFilter(f)} className="tool-btn capitalize">
                 {f}
               </button>
             ))}
           </div>
-          <div className="flex-1" />
-          <button onClick={() => navigate('/create')} className="tool-btn-primary">
+          <button onClick={() => navigate('/create')} className="tool-btn-primary hidden sm:inline-flex">
             <Plus className="h-3.5 w-3.5" />
             New Task
           </button>
-        </>
+        </div>
       }
       panel={
         <>
@@ -103,20 +107,20 @@ const Board = () => {
               <div
                 key={task.contractAddress}
                 onClick={() => navigate(`/task/${task.contractAddress}`)}
-                className={`flex items-center gap-4 px-3 py-2.5 bg-card hover:bg-muted/60 cursor-pointer transition-colors
+                className={`flex items-center gap-2 sm:gap-4 px-3 py-2.5 bg-card hover:bg-muted/60 cursor-pointer transition-colors
                             ${i !== 0 ? 'border-t border-border' : ''}`}
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-foreground truncate">{task.title}</p>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">{task.description}</p>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5 hidden xs:block">{task.description}</p>
                 </div>
-                <span className="text-xs font-mono text-muted-foreground shrink-0 hidden sm:block">
+                <span className="text-xs font-mono text-muted-foreground shrink-0 hidden md:block">
                   {task.creator.slice(0, 6)}…{task.creator.slice(-4)}
                 </span>
-                <span className="text-xs font-medium text-foreground shrink-0 w-16 text-right">
+                <span className="text-xs font-medium text-foreground shrink-0 w-12 sm:w-16 text-right">
                   {task.reward_amount} GEN
                 </span>
-                <div className="shrink-0 w-24 flex justify-end">
+                <div className="shrink-0 flex justify-end">
                   <StatusBadge status={task.status} />
                 </div>
               </div>

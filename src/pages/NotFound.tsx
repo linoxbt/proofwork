@@ -16,7 +16,7 @@ const NotFound = () => {
         <CodeCard title="404" className="w-72 text-center">
           <p className="text-lg font-semibold text-foreground mb-1">Page not found</p>
           <p className="text-sm text-muted-foreground mb-4">{location.pathname}</p>
-          <a href="/" className="tool-btn-primary w-full h-8 inline-flex">
+          <a href="/board" className="tool-btn-primary w-full h-8 inline-flex">
             Back to Board
           </a>
         </CodeCard>

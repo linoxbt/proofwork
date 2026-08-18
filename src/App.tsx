@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import Landing from "./pages/Landing";
 import Board from "./pages/Index";
 import CreateTask from "./pages/CreateTask";
 import TaskDetail from "./pages/TaskDetail";
@@ -22,8 +23,9 @@ const App = () => (
         <BrowserRouter>
           <ErrorBoundary>
             <Routes>
-              <Route path="/" element={<Board />} />
-              <Route path="/tasks" element={<Navigate to="/" replace />} />
+              <Route path="/" element={<Landing />} />
+              <Route path="/board" element={<Board />} />
+              <Route path="/tasks" element={<Navigate to="/board" replace />} />
               <Route path="/create" element={<CreateTask />} />
               <Route path="/task/:address" element={<TaskDetail />} />
               <Route path="/about" element={<About />} />

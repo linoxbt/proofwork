@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import { createClient } from 'genlayer-js';
 import { testnetAsimov } from 'genlayer-js/chains';
 import { WalletPickerModal } from '@/components/WalletPickerModal';
+import { getAppKit, isReownConfigured } from '@/lib/reown';
 
 interface WalletContextType {
   address: string;
@@ -21,6 +22,8 @@ function truncateAddress(address: string) {
   if (!address) return '';
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
+
+export const REOWN_PROVIDER_ID = 'reown';
 
 interface DetectedProvider {
   name: string;
@@ -110,6 +113,53 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [buildClient]);
 
+  // WalletConnect/Reown: opens a QR-code / deep-link modal so wallets without an
+  // injected provider (most notably mobile browsers) can still connect.
+  const connectWithReown = useCallback(async () => {
+    const modal = getAppKit();
+    if (!modal) {
+      console.error('Reown AppKit is not configured — set VITE_REOWN_PROJECT_ID.');
+      return;
+    }
+    setIsConnecting(true);
+    try {
+      setPickerOpen(false);
+      await modal.open();
+
+      const connectedAddress = await new Promise<string | null>((resolve) => {
+        let settled = false;
+        const settle = (value: string | null) => {
+          if (settled) return;
+          settled = true;
+          unsubAccount();
+          unsubState();
+          resolve(value);
+        };
+        const unsubAccount = modal.subscribeAccount((acc) => {
+          if (acc.isConnected && acc.address) settle(acc.address);
+        });
+        const unsubState = modal.subscribeState((state) => {
+          // Modal closed without completing a connection
+          if (!state.open && !modal.getIsConnectedState()) {
+            setTimeout(() => settle(null), 300);
+          }
+        });
+      });
+
+      if (!connectedAddress) return;
+
+      const provider = modal.getWalletProvider();
+      setAddress(connectedAddress);
+      setClient(buildClient(connectedAddress, provider));
+      setActiveProvider(provider);
+      setProviderName('WalletConnect');
+    } catch (err) {
+      console.error('Reown wallet connection failed:', err);
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [buildClient]);
+
   const connect = useCallback(async () => {
     const detected = detectProviders();
     setPendingProviders(detected);
@@ -118,7 +168,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const disconnect = useCallback(() => {
     setAddress(''); setClient(null); setProviderName(''); setActiveProvider(null);
-  }, []);
+    if (providerName === 'WalletConnect') {
+      getAppKit()?.disconnect().catch(() => {});
+    }
+  }, [providerName]);
 
   return (
     <WalletContext.Provider
@@ -140,6 +193,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         onClose={() => setPickerOpen(false)}
         providers={pendingProviders}
         onSelect={(p) => connectWithProvider(p)}
+        showReown={isReownConfigured()}
+        onSelectReown={connectWithReown}
       />
     </WalletContext.Provider>
   );

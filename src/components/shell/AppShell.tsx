@@ -1,9 +1,11 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { TitleBar } from './TitleBar';
 import { PersonaTabs } from './PersonaTabs';
 import { Toolbar } from './Toolbar';
 import { StudioPanel } from './StudioPanel';
 import { StatusBar } from './StatusBar';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { PanelRight } from 'lucide-react';
 
 interface AppShellProps {
   children: ReactNode;
@@ -13,16 +15,37 @@ interface AppShellProps {
 }
 
 export function AppShell({ children, toolbar, breadcrumb, panel }: AppShellProps) {
+  const [panelOpen, setPanelOpen] = useState(false);
+
   return (
-    <div className="h-screen flex flex-col bg-background text-foreground">
+    <div className="h-dvh flex flex-col bg-background text-foreground overflow-hidden">
       <TitleBar />
       <PersonaTabs />
-      <Toolbar breadcrumb={breadcrumb}>{toolbar}</Toolbar>
+      <Toolbar breadcrumb={breadcrumb}>
+        {toolbar}
+        {panel && (
+          <button
+            onClick={() => setPanelOpen(true)}
+            className="tool-btn lg:hidden ml-auto"
+            title="Show details"
+          >
+            <PanelRight className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </Toolbar>
       <div className="flex-1 flex min-h-0">
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
         {panel && <StudioPanel>{panel}</StudioPanel>}
       </div>
       <StatusBar />
+
+      {panel && (
+        <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
+          <SheetContent side="right" className="w-[85vw] max-w-xs p-0 bg-card border-border overflow-y-auto">
+            {panel}
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

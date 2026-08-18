@@ -153,7 +153,7 @@ const TaskDetail = () => {
         <div className="flex-1 flex items-center justify-center h-full">
           <CodeCard title="404" className="w-72 text-center">
             <p className="text-muted-foreground text-sm mb-4">Task not found.</p>
-            <button onClick={() => navigate('/')} className="tool-btn-primary w-full h-8">
+            <button onClick={() => navigate('/board')} className="tool-btn-primary w-full h-8">
               Back to Board
             </button>
           </CodeCard>

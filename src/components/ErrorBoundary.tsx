@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <p className="text-sm font-semibold text-foreground mb-1">Something went wrong</p>
               <p className="text-xs text-muted-foreground mb-4">{this.state.error.message}</p>
               <button
-                onClick={() => { this.setState({ error: null }); window.location.href = '/'; }}
+                onClick={() => { this.setState({ error: null }); window.location.href = '/board'; }}
                 className="tool-btn-primary w-full h-8"
               >
                 Back to Board

@@ -86,7 +86,7 @@
   /* Persona tab strip */
   .persona-tab {
     @apply relative flex items-center gap-1.5 px-3.5 h-full text-xs font-medium text-muted-foreground
-           hover:text-foreground transition-colors border-b-2 border-transparent;
+           hover:text-foreground transition-colors border-b-2 border-transparent shrink-0 whitespace-nowrap;
   }
   .persona-tab[data-active="true"] {
     @apply text-foreground border-primary;
@@ -95,7 +95,7 @@
   /* Toolbar icon buttons */
   .tool-btn {
     @apply inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-[4px] text-xs font-medium
-           text-muted-foreground border border-transparent
+           text-muted-foreground border border-transparent shrink-0 whitespace-nowrap
            hover:bg-foreground/[0.06] hover:text-foreground transition-colors
            disabled:opacity-40 disabled:pointer-events-none;
   }
@@ -104,7 +104,7 @@
   }
   .tool-btn-primary {
     @apply inline-flex items-center justify-center gap-1.5 h-7 px-3 rounded-[4px] text-xs font-medium
-           bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
+           bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 whitespace-nowrap
            disabled:opacity-40 disabled:pointer-events-none;
   }
 
@@ -144,5 +144,63 @@
 
   .status-dot {
     @apply h-1.5 w-1.5 rounded-full shrink-0;
+  }
+
+  /* Landing page */
+  .grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 40%, transparent 100%);
+  }
+
+  .hero-glow {
+    position: absolute;
+    inset: -10% -10% auto -10%;
+    height: 32rem;
+    pointer-events: none;
+    background:
+      radial-gradient(38rem 20rem at 25% 15%, hsl(var(--primary) / 0.16), transparent 60%),
+      radial-gradient(30rem 18rem at 78% 25%, hsl(var(--secondary) / 0.14), transparent 60%);
+    animation: hero-drift 16s ease-in-out infinite alternate;
+  }
+
+  .text-gradient {
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--secondary)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .animated-glow {
+    background: radial-gradient(circle, hsl(var(--primary) / 0.12), transparent 65%);
+    animation: pulse-soft 4s ease-in-out infinite;
+  }
+
+  .node-pulse {
+    animation: node-pulse 2.6s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  @keyframes hero-drift {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(2%, 3%) scale(1.05); }
+  }
+
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.06); }
+  }
+
+  @keyframes node-pulse {
+    0%, 100% { opacity: 0.75; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.12); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-glow, .animated-glow, .node-pulse {
+      animation: none;
+    }
   }
 }
