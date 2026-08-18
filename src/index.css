@@ -138,6 +138,10 @@
     @apply bg-destructive/12 text-destructive border border-destructive/25;
   }
 
+  .status-disputed {
+    @apply bg-accent/20 text-accent border border-accent/40;
+  }
+
   .status-dot {
     @apply h-1.5 w-1.5 rounded-full shrink-0;
   }

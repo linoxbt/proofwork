@@ -1,10 +1,12 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 # AI-Verified Task Completion — GenLayer Intelligent Contract
-# Deploy via GenLayer CLI: genlayer deploy --contract contracts/task_verifier.py --args <title> <description> <criteria> <reward_amount>
+# Deploy via GenLayer CLI: genlayer deploy --contract contracts/task_verifier.py
+#   --args <title> <category> <description> <criteria> <reward_amount> <deadline_unix_ts>
 
 from genlayer import *
 
+from datetime import datetime, timezone
 import json
 
 ERROR_EXPECTED = "[EXPECTED]"  # business logic — deterministic, exact match
@@ -16,44 +18,82 @@ ERROR_LLM = "[LLM_ERROR]"  # LLM misbehavior — always disagree, force rotation
 class TaskVerifier(gl.Contract):
     creator: str
     title: str
+    category: str
     description: str
     criteria: str
     reward_amount: u256
+    deadline: u256  # unix timestamp; worker must submit before this
     worker: str
     submission_url: str
-    status: str  # "open", "claimed", "submitted", "verified", "rejected"
+    status: str  # "open", "claimed", "submitted", "verified", "rejected", "disputed"
     verification_result: str
+    dispute_count: u256
+    dispute_reason: str
     created_at: u256
 
-    def __init__(self, title: str, description: str, criteria: str, reward_amount: int):
+    def __init__(
+        self,
+        title: str,
+        category: str,
+        description: str,
+        criteria: str,
+        reward_amount: int,
+        deadline: int,
+    ):
+        now = int(datetime.now(timezone.utc).timestamp())
+        assert deadline > now, "Deadline must be in the future"
         self.creator = str(gl.message.sender_address)
         self.title = title
+        self.category = category
         self.description = description
         self.criteria = criteria
         self.reward_amount = reward_amount
+        self.deadline = deadline
         self.worker = ""
         self.submission_url = ""
         self.status = "open"
         self.verification_result = ""
-        self.created_at = 0
+        self.dispute_count = 0
+        self.dispute_reason = ""
+        self.created_at = now
 
     @gl.public.write
     def claim_task(self) -> None:
         caller = str(gl.message.sender_address)
+        now = int(datetime.now(timezone.utc).timestamp())
         assert self.status == "open", "Task is not open"
         assert caller != self.creator, "Creator cannot claim own task"
+        assert now <= self.deadline, "Task deadline has passed"
         self.worker = caller
         self.status = "claimed"
 
     @gl.public.write
     def submit_work(self, github_url: str) -> None:
         caller = str(gl.message.sender_address)
+        now = int(datetime.now(timezone.utc).timestamp())
         assert caller == self.worker, "Only assigned worker can submit"
         assert self.status == "claimed", "Task must be claimed first"
+        assert now <= self.deadline, "Task deadline has passed"
         self.submission_url = github_url
         self.status = "submitted"
-        # AI verification happens here
+        # Evidence is now locked in. AI verification must be triggered separately
+        # via request_verification() by either the creator or the worker.
+
+    @gl.public.write
+    def request_verification(self) -> None:
+        caller = str(gl.message.sender_address)
+        assert caller in (self.creator, self.worker), "Only creator or worker can request verification"
+        assert self.status in ("submitted", "disputed"), "Task must be submitted or disputed to verify"
         self._verify_submission()
+
+    @gl.public.write
+    def dispute(self, reason: str) -> None:
+        caller = str(gl.message.sender_address)
+        assert caller in (self.creator, self.worker), "Only creator or worker can dispute"
+        assert self.status in ("verified", "rejected"), "Can only dispute a decided verification"
+        self.dispute_count += 1
+        self.dispute_reason = reason
+        self.status = "disputed"
 
     @gl.public.write
     def cancel_task(self) -> None:
@@ -68,13 +108,18 @@ class TaskVerifier(gl.Contract):
         return {
             "creator": self.creator,
             "title": self.title,
+            "category": self.category,
             "description": self.description,
             "criteria": self.criteria,
             "reward_amount": self.reward_amount,
+            "deadline": self.deadline,
             "worker": self.worker,
             "submission_url": self.submission_url,
             "status": self.status,
             "verification_result": self.verification_result,
+            "dispute_count": self.dispute_count,
+            "dispute_reason": self.dispute_reason,
+            "created_at": self.created_at,
         }
 
     def _verify_submission(self):
@@ -82,13 +127,25 @@ class TaskVerifier(gl.Contract):
         description = self.description
         criteria = self.criteria
         submission_url = self.submission_url
+        dispute_reason = self.dispute_reason
+        is_redispute = self.dispute_count > 0
 
         def analyze():
-            # Fetch the GitHub repository content
+            # Fetch the GitHub repository content fresh, every time this is called
             try:
                 web_data = gl.nondet.web.render(submission_url, mode="text")
             except Exception as e:
                 raise gl.vm.UserError(f"{ERROR_TRANSIENT} failed to fetch {submission_url}: {e}")
+
+            dispute_context = ""
+            if is_redispute and dispute_reason:
+                dispute_context = f"""
+This submission was DISPUTED by one of the parties. Re-examine the repository
+carefully in light of the dispute reason below, and do not simply repeat a
+prior verdict — form your own independent judgment from the current evidence.
+
+DISPUTE REASON: {dispute_reason}
+"""
 
             prompt = f"""You are an AI code reviewer verifying task completion.
 
@@ -97,7 +154,7 @@ TASK DESCRIPTION: {description}
 COMPLETION CRITERIA: {criteria}
 
 SUBMITTED GITHUB URL: {submission_url}
-
+{dispute_context}
 REPOSITORY CONTENT:
 {web_data[:8000]}
 

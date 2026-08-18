@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useTasks } from '@/hooks/useTasks';
 import { Search, Plus, LayoutGrid } from 'lucide-react';
 
-const FILTERS = ['all', 'open', 'claimed', 'submitted', 'verified', 'rejected'] as const;
+const FILTERS = ['all', 'open', 'claimed', 'submitted', 'disputed', 'verified', 'rejected'] as const;
 
 const Board = () => {
   const navigate = useNavigate();
@@ -59,7 +59,7 @@ const Board = () => {
           <PanelSection title="Overview">
             <PanelRow label="Total tasks" value={counts.all} />
             <PanelRow label="Open" value={counts.open} />
-            <PanelRow label="In progress" value={counts.claimed + counts.submitted} />
+            <PanelRow label="In progress" value={counts.claimed + counts.submitted + counts.disputed} />
             <PanelRow label="Verified" value={counts.verified} />
             <PanelRow label="Rejected" value={counts.rejected} />
           </PanelSection>

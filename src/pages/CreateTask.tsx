@@ -8,28 +8,50 @@ import { deployTaskContract } from '@/lib/contract';
 import { registerTask } from '@/lib/taskRegistry';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Rocket, Wallet } from 'lucide-react';
+import { Rocket, Wallet, CalendarIcon } from 'lucide-react';
+import { format, addDays } from 'date-fns';
 import taskVerifierCode from '../../contracts/task_verifier.py?raw';
+
+const CATEGORIES = ['Backend', 'Frontend', 'Smart Contract', 'Design', 'Data / ML', 'DevOps', 'Other'];
 
 const CreateTask = () => {
   const navigate = useNavigate();
   const { isConnected, connect, client } = useWallet();
   const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [criteria, setCriteria] = useState('');
   const [reward, setReward] = useState('100');
+  const [deadline, setDeadline] = useState<Date | undefined>(addDays(new Date(), 7));
   const [deploying, setDeploying] = useState(false);
 
   const handleDeploy = useCallback(async () => {
-    if (!client || !title || !description || !criteria) {
+    if (!client || !title || !category || !description || !criteria || !deadline) {
       toast.error('Please fill in all fields');
+      return;
+    }
+    if (deadline.getTime() <= Date.now()) {
+      toast.error('Deadline must be in the future');
       return;
     }
     setDeploying(true);
     try {
       toast.info('Deploying contract to Asimov testnet…');
-      const addr = await deployTaskContract(client, taskVerifierCode, title, description, criteria, parseInt(reward) || 100);
+      const deadlineUnixSeconds = Math.floor(deadline.getTime() / 1000);
+      const addr = await deployTaskContract(
+        client,
+        taskVerifierCode,
+        title,
+        category,
+        description,
+        criteria,
+        parseInt(reward) || 100,
+        deadlineUnixSeconds
+      );
       registerTask(addr);
       toast.success('Task deployed on-chain!');
       navigate(`/task/${addr}`);
@@ -38,14 +60,15 @@ const CreateTask = () => {
     } finally {
       setDeploying(false);
     }
-  }, [client, title, description, criteria, reward, navigate]);
+  }, [client, title, category, description, criteria, reward, deadline, navigate]);
 
   const panel = (
     <>
       <PanelSection title="Preview">
         <PanelRow label="Title" value={title || '—'} />
+        <PanelRow label="Category" value={category || '—'} />
         <PanelRow label="Reward" value={`${reward || 0} GEN`} />
-        <PanelRow label="Status" value="open" />
+        <PanelRow label="Deadline" value={deadline ? format(deadline, 'MMM d, yyyy') : '—'} />
       </PanelSection>
       <PanelSection title="Contract" defaultOpen={false}>
         <PanelRow label="Type" value="TaskVerifier" />
@@ -53,7 +76,7 @@ const CreateTask = () => {
         <PanelRow label="Network" value="Asimov Testnet" />
         <p className="text-xs text-muted-foreground leading-relaxed mt-2">
           Deploying creates a new Intelligent Contract instance holding this task's state — criteria,
-          claim status, and the AI verification result once submitted.
+          deadline, claim status, and the AI verification result once requested.
         </p>
       </PanelSection>
     </>
@@ -82,7 +105,7 @@ const CreateTask = () => {
           <div className="flex-1" />
           <button
             onClick={handleDeploy}
-            disabled={deploying || !title || !description || !criteria}
+            disabled={deploying || !title || !category || !description || !criteria || !deadline}
             className="tool-btn-primary"
           >
             <Rocket className="h-3.5 w-3.5" />
@@ -104,6 +127,49 @@ const CreateTask = () => {
                 className="bg-background border-border text-sm"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Category</label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger className="bg-background border-border text-sm h-10">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Deadline</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full h-10 flex items-center gap-2 px-3 rounded-md border border-border bg-background text-sm text-left hover:bg-muted/50 transition-colors"
+                    >
+                      <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className={deadline ? 'text-foreground' : 'text-muted-foreground'}>
+                        {deadline ? format(deadline, 'PPP') : 'Pick a date'}
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={deadline}
+                      onSelect={setDeadline}
+                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Description</label>
               <Textarea
