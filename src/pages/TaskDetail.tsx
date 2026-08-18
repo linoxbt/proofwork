@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Header } from '@/components/Header';
+import { AppShell } from '@/components/shell/AppShell';
+import { PanelSection, PanelRow } from '@/components/shell/StudioPanel';
 import { CodeCard } from '@/components/CodeCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { VerificationProgress } from '@/components/VerificationProgress';
@@ -16,7 +16,7 @@ import {
   type ContractTaskState,
   type VerificationResult,
 } from '@/lib/contract';
-import { CheckCircle2, XCircle, ExternalLink, GitBranch, Cpu, User, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins } from 'lucide-react';
 
 const TaskDetail = () => {
   const { address: contractAddr } = useParams();
@@ -54,7 +54,6 @@ const TaskDetail = () => {
   const canClaim = task?.status === 'open' && isConnected && !isCreator;
   const canSubmit = task?.status === 'claimed' && isConnected && isWorker;
 
-  // Auto-trigger verification animation for submitted/verified/rejected tasks
   useEffect(() => {
     if (task && (task.status === 'submitted' || task.status === 'verified' || task.status === 'rejected')) {
       const timer = setTimeout(() => setShowVerification(true), 500);
@@ -80,7 +79,7 @@ const TaskDetail = () => {
     if (!client || !contractAddr || !githubUrl) return;
     setSubmitting(true);
     try {
-      toast.info('Submitting work — AI validators will fetch and analyze the repo, this can take a minute...');
+      toast.info('Submitting work — AI validators will fetch and analyze the repo, this can take a minute…');
       await submitWork(client, contractAddr, githubUrl);
       toast.success('AI verification complete!');
       setShowVerification(true);
@@ -94,187 +93,170 @@ const TaskDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground text-sm font-mono">Loading task from chain...</p>
+      <AppShell breadcrumb="Board / Loading…">
+        <div className="flex-1 flex items-center justify-center h-full">
+          <p className="text-muted-foreground text-sm">Loading task from chain…</p>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!task) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <CodeCard title="404">
-            <p className="text-muted-foreground text-sm mb-4 font-mono">Task not found.</p>
-            <button onClick={() => navigate('/tasks')} className="text-xs text-primary font-mono hover:underline">
-              ← Back to tasks
+      <AppShell breadcrumb="Board / Not Found">
+        <div className="flex-1 flex items-center justify-center h-full">
+          <CodeCard title="404" className="w-72 text-center">
+            <p className="text-muted-foreground text-sm mb-4">Task not found.</p>
+            <button onClick={() => navigate('/')} className="tool-btn-primary w-full h-8">
+              Back to Board
             </button>
           </CodeCard>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Header />
-      <main className="flex-1 px-4 py-8 max-w-3xl mx-auto w-full">
-        <button
-          onClick={() => navigate('/tasks')}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-mono mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-3 w-3" /> back to tasks
-        </button>
+  const panel = (
+    <>
+      <PanelSection title="Properties">
+        <PanelRow label="Status" value={<StatusBadge status={task.status} />} />
+        <PanelRow label="Reward" value={`${task.reward_amount} GEN`} />
+        <PanelRow label="Creator" value={`${task.creator.slice(0, 6)}…${task.creator.slice(-4)}`} />
+        <PanelRow label="Worker" value={task.worker ? `${task.worker.slice(0, 6)}…${task.worker.slice(-4)}` : '—'} />
+      </PanelSection>
+      {verification && (
+        <PanelSection title="Verification">
+          <PanelRow label="Result" value={verification.verified ? 'Verified' : 'Rejected'} />
+          <PanelRow label="Confidence" value={`${verification.confidence}%`} />
+        </PanelSection>
+      )}
+    </>
+  );
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          {/* Task info */}
-          <div className="flex items-start justify-between gap-4">
+  return (
+    <AppShell
+      breadcrumb={`Board / ${task.title}`}
+      toolbar={
+        <>
+          <StatusBadge status={task.status} />
+          <span className="text-xs font-medium text-foreground">{task.reward_amount} GEN</span>
+          <div className="flex-1" />
+          {canClaim && (
+            <button onClick={handleClaim} disabled={claiming} className="tool-btn-primary">
+              <HandCoins className="h-3.5 w-3.5" />
+              {claiming ? 'Claiming…' : 'Claim Task'}
+            </button>
+          )}
+          {!isConnected && (
+            <button onClick={connect} className="tool-btn-primary">
+              <Wallet className="h-3.5 w-3.5" /> Connect Wallet
+            </button>
+          )}
+        </>
+      }
+      panel={panel}
+    >
+      <div className="max-w-3xl mx-auto p-4 space-y-3">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">{task.title}</h1>
+        </div>
+
+        <CodeCard title="Task Specification">
+          <div className="space-y-4 text-sm">
             <div>
-              <h1 className="font-mono text-lg font-bold text-foreground">{task.title}</h1>
-              <div className="flex items-center gap-3 mt-2">
-                <StatusBadge status={task.status} />
-                <span className="text-xs font-mono text-accent font-medium">{task.reward_amount} GEN</span>
-              </div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Description</p>
+              <p className="text-foreground/85 leading-relaxed">{task.description}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Verification Criteria</p>
+              <pre className="text-xs text-foreground/85 whitespace-pre-wrap bg-muted/40 rounded p-3 font-mono">
+                {task.criteria}
+              </pre>
             </div>
           </div>
+        </CodeCard>
 
-          {/* Description & Criteria */}
-          <CodeCard title="task_spec.md">
-            <div className="space-y-4 text-sm">
-              <div>
-                <p className="text-xs font-mono text-muted-foreground mb-1">Description</p>
-                <p className="text-foreground/80 leading-relaxed">{task.description}</p>
+        {canSubmit && (
+          <CodeCard title="Submit Work" variant="blue">
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Submit your GitHub repository URL for AI verification.</p>
+              <Input
+                value={githubUrl}
+                onChange={(e) => setGithubUrl(e.target.value)}
+                placeholder="https://github.com/username/repo"
+                className="bg-background border-border text-sm font-mono"
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !githubUrl}
+                className="tool-btn-primary h-8 w-full"
+              >
+                <Send className="h-3.5 w-3.5" />
+                {submitting ? 'Submitting for AI Review…' : 'Submit for Verification'}
+              </button>
+            </div>
+          </CodeCard>
+        )}
+
+        {showVerification && (
+          <CodeCard title="AI Verification" variant="blue">
+            <VerificationProgress isActive={showVerification} result={verification} />
+          </CodeCard>
+        )}
+
+        {verification && (
+          <CodeCard title="Verification Result">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                {verification.verified ? (
+                  <CheckCircle2 className="h-7 w-7 text-success" />
+                ) : (
+                  <XCircle className="h-7 w-7 text-destructive" />
+                )}
+                <div>
+                  <p className={`font-semibold text-base ${verification.verified ? 'text-success' : 'text-destructive'}`}>
+                    {verification.verified ? 'Verified' : 'Rejected'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Confidence: {verification.confidence}% · AI Consensus
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-mono text-muted-foreground mb-1">Verification Criteria</p>
-                <pre className="text-xs text-foreground/80 font-mono whitespace-pre-wrap bg-muted/30 rounded p-3">
-                  {task.criteria}
-                </pre>
+
+              <div className="bg-muted/40 rounded p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <Cpu className="h-3 w-3" /> AI Analysis
+                </p>
+                <p className="text-sm text-foreground/85 leading-relaxed">{verification.reasoning}</p>
               </div>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border">
-                <span className="flex items-center gap-1"><User className="h-3 w-3" /> Creator: {task.creator}</span>
-                {task.worker && <span className="flex items-center gap-1"><GitBranch className="h-3 w-3" /> Worker: {task.worker}</span>}
+
+              {task.submission_url && (
+                <a
+                  href={task.submission_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-secondary hover:underline font-mono"
+                >
+                  <ExternalLink className="h-3 w-3" /> {task.submission_url}
+                </a>
+              )}
+            </div>
+          </CodeCard>
+        )}
+
+        {task.status === 'submitted' && !verification && !showVerification && (
+          <CodeCard title="Verifying…">
+            <div className="flex items-center gap-3 py-1">
+              <Cpu className="h-5 w-5 text-secondary animate-pulse" />
+              <div>
+                <p className="text-sm font-medium text-secondary">AI Validators Processing…</p>
+                <p className="text-xs text-muted-foreground">Fetching repo, analyzing code, reaching consensus</p>
               </div>
             </div>
           </CodeCard>
-
-          {/* Actions */}
-          {canClaim && (
-            <CodeCard title="claim_task.sh">
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">Ready to take on this task? Claim it to get started.</p>
-                <button
-                  onClick={handleClaim}
-                  disabled={claiming}
-                  className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-mono text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                >
-                  {claiming ? '⏳ Claiming...' : '$ claim_task'}
-                </button>
-              </div>
-            </CodeCard>
-          )}
-
-          {canSubmit && (
-            <CodeCard title="submit_work.sh" variant="blue">
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">Submit your GitHub repository URL for AI verification.</p>
-                <Input
-                  value={githubUrl}
-                  onChange={(e) => setGithubUrl(e.target.value)}
-                  placeholder="https://github.com/username/repo"
-                  className="bg-background border-border font-mono text-sm"
-                />
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting || !githubUrl}
-                  className="w-full py-2.5 rounded-lg bg-secondary text-secondary-foreground font-mono text-sm font-medium hover:bg-secondary/90 disabled:opacity-50 transition-colors"
-                >
-                  {submitting ? '⏳ Submitting for AI Review...' : '$ submit_work --verify'}
-                </button>
-              </div>
-            </CodeCard>
-          )}
-
-          {/* Verification animation */}
-          {showVerification && (
-            <CodeCard title="ai_verification.log" variant="blue">
-              <VerificationProgress
-                isActive={showVerification}
-                result={verification}
-              />
-            </CodeCard>
-          )}
-
-          {/* Verification result details */}
-          {verification && (
-            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
-              <CodeCard title="verification_result.json" variant={verification.verified ? 'default' : 'blue'}>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    {verification.verified ? (
-                      <CheckCircle2 className="h-8 w-8 text-primary" />
-                    ) : (
-                      <XCircle className="h-8 w-8 text-destructive" />
-                    )}
-                    <div>
-                      <p className={`font-mono font-bold text-lg ${verification.verified ? 'text-primary glow-green' : 'text-destructive glow-red'}`}>
-                        {verification.verified ? 'VERIFIED ✓' : 'REJECTED ✗'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Confidence: {verification.confidence}% · AI Consensus
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs font-mono text-muted-foreground mb-1.5 flex items-center gap-1">
-                      <Cpu className="h-3 w-3" /> AI Analysis
-                    </p>
-                    <p className="text-sm text-foreground/80 leading-relaxed">{verification.reasoning}</p>
-                  </div>
-
-                  {task.submission_url && (
-                    <a
-                      href={task.submission_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs text-secondary hover:underline font-mono"
-                    >
-                      <ExternalLink className="h-3 w-3" /> {task.submission_url}
-                    </a>
-                  )}
-                </div>
-              </CodeCard>
-            </motion.div>
-          )}
-
-          {task.status === 'submitted' && !verification && !showVerification && (
-            <CodeCard title="verifying...">
-              <div className="flex items-center gap-3 py-2">
-                <Cpu className="h-5 w-5 text-secondary animate-pulse-glow" />
-                <div>
-                  <p className="text-sm font-mono text-secondary glow-blue">AI Validators Processing...</p>
-                  <p className="text-xs text-muted-foreground">Fetching repo, analyzing code, reaching consensus</p>
-                </div>
-              </div>
-            </CodeCard>
-          )}
-
-          {!isConnected && (
-            <CodeCard title="connect">
-              <p className="text-muted-foreground text-sm mb-3">Connect your wallet to interact with this task.</p>
-              <button onClick={connect} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-mono text-sm">
-                Connect Wallet
-              </button>
-            </CodeCard>
-          )}
-        </motion.div>
-      </main>
-    </div>
+        )}
+      </div>
+    </AppShell>
   );
 };
 

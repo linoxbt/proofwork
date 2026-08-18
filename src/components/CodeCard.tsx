@@ -1,5 +1,4 @@
 import { cn } from '@/lib/utils';
-import { GitBranch } from 'lucide-react';
 
 interface CodeCardProps {
   title: string;
@@ -10,14 +9,14 @@ interface CodeCardProps {
 
 export function CodeCard({ title, children, className, variant = 'default' }: CodeCardProps) {
   return (
-    <div className={cn(
-      'rounded-lg border bg-card overflow-hidden',
-      variant === 'blue' ? 'card-glow-blue' : 'card-glow',
-      className
-    )}>
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5 bg-muted/30">
-        <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground font-mono tracking-wide">
+    <div className={cn('rounded border border-border bg-card overflow-hidden', className)}>
+      <div
+        className={cn(
+          'flex items-center gap-2 border-b border-border px-3 h-8',
+          variant === 'blue' ? 'bg-secondary/[0.06]' : 'bg-muted/40'
+        )}
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </span>
       </div>

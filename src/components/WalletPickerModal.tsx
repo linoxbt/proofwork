@@ -43,7 +43,7 @@ export function WalletPickerModal({ open, onClose, providers, onSelect }: Wallet
       <DialogContent className="sm:max-w-[360px] bg-card border-border p-0 gap-0 overflow-hidden">
         <div className="p-5 pb-3">
           <DialogHeader>
-            <DialogTitle className="font-mono text-base text-foreground flex items-center gap-2">
+            <DialogTitle className="text-base font-semibold text-foreground flex items-center gap-2">
               <Wallet className="h-4 w-4 text-primary" />
               Connect Wallet
             </DialogTitle>

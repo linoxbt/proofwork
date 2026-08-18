@@ -90,9 +90,9 @@ export function VerificationProgress({ isActive, result, className }: Verificati
             </div>
             <div className="flex-1 min-w-0">
               <p className={cn(
-                'text-xs font-mono font-medium',
+                'text-xs font-medium',
                 isCompleted && 'text-primary',
-                isCurrent && 'text-secondary glow-blue',
+                isCurrent && 'text-secondary',
                 isPending && 'text-muted-foreground'
               )}>
                 {step.label}
@@ -135,23 +135,23 @@ export function VerificationProgress({ isActive, result, className }: Verificati
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3, type: 'spring' }}
             className={cn(
-              'flex items-center gap-3 px-3 py-3 rounded-md mt-2 border',
+              'flex items-center gap-3 px-3 py-3 rounded mt-2 border',
               result.verified
-                ? 'bg-primary/5 border-primary/20'
-                : 'bg-destructive/5 border-destructive/20'
+                ? 'bg-success/10 border-success/25'
+                : 'bg-destructive/10 border-destructive/25'
             )}
           >
             {result.verified ? (
-              <CheckCircle2 className="h-5 w-5 text-primary" />
+              <CheckCircle2 className="h-5 w-5 text-success" />
             ) : (
               <XCircle className="h-5 w-5 text-destructive" />
             )}
             <div>
               <p className={cn(
-                'text-sm font-mono font-bold',
-                result.verified ? 'text-primary glow-green' : 'text-destructive glow-red'
+                'text-sm font-semibold',
+                result.verified ? 'text-success' : 'text-destructive'
               )}>
-                {result.verified ? 'CONSENSUS: VERIFIED ✓' : 'CONSENSUS: REJECTED ✗'}
+                {result.verified ? 'Consensus: Verified' : 'Consensus: Rejected'}
               </p>
               <p className="text-[11px] text-muted-foreground">
                 {result.confidence}% confidence across all validators
