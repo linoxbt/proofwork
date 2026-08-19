@@ -20,7 +20,7 @@ const STEPS = [
   { icon: Wallet, title: 'Claim', desc: 'A worker picks up the open task and gets to work.' },
   { icon: Cpu, title: 'AI Verifies', desc: 'Validators fetch the evidence and judge it against the rubric.' },
   { icon: Users, title: 'Consensus', desc: 'A supermajority of independent validators must agree.' },
-  { icon: Lock, title: 'Escrow Releases', desc: '24h later — to the worker if verified, refunded if not.' },
+  { icon: Lock, title: 'Escrow Releases', desc: '24h later - to the worker if verified, refunded if not.' },
 ];
 
 const reveal = (delay = 0) => ({
@@ -51,7 +51,7 @@ function FlowRail() {
   );
 }
 
-// Abstract "AI validators reaching consensus" graphic — independent nodes
+// Abstract "AI validators reaching consensus" graphic - independent nodes
 // examining evidence, then converging on a verdict. Pure inline SVG + CSS.
 function ConsensusGraphic() {
   const nodes = [
@@ -152,7 +152,7 @@ const Landing = () => {
         </div>
       </header>
 
-      {/* Hero — asymmetric split, not centered */}
+      {/* Hero - asymmetric split, not centered */}
       <section ref={heroRef} className="relative px-4 sm:px-6 pt-14 pb-10 sm:pt-20">
         <div className="hero-glow" aria-hidden />
         <div className="grid-bg absolute inset-0 opacity-[0.12]" aria-hidden />
@@ -188,7 +188,7 @@ const Landing = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="mt-6 text-base text-muted-foreground max-w-md leading-relaxed text-left"
             >
-              No human reviewers. Reward locked in on-chain escrow the moment you post — independent AI
+              No human reviewers. Reward locked in on-chain escrow the moment you post - independent AI
               validators fetch the evidence, judge it against your rubric, and reach consensus.
             </motion.p>
 
@@ -228,7 +228,7 @@ const Landing = () => {
 
       <Marquee items={marqueeItems} />
 
-      {/* Bento feature grid — asymmetric, left-aligned */}
+      {/* Bento feature grid - asymmetric, left-aligned */}
       <section className="px-4 sm:px-6 py-16 sm:py-20">
         <div className="max-w-6xl mx-auto">
           <motion.h2 {...reveal()} className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-6">
@@ -241,8 +241,8 @@ const Landing = () => {
                 <Lock className="h-6 w-6 text-primary mb-3" />
                 <p className="text-lg font-semibold text-foreground mb-2">Real escrow, not a display number</p>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
-                  The TaskFactory contract locks GEN the moment a task is created. It only pays out — or
-                  refunds — 24 hours after a decided verdict, giving both sides a real window to dispute.
+                  The TaskFactory contract locks GEN the moment a task is created. It only pays out - or
+                  refunds - 24 hours after a decided verdict, giving both sides a real window to dispute.
                 </p>
               </div>
               <div className="mt-6 flex items-center gap-4 text-xs text-muted-foreground">
@@ -254,13 +254,13 @@ const Landing = () => {
             <motion.div {...reveal(0.08)} className="bento-tile">
               <Cpu className="h-5 w-5 text-primary mb-3" />
               <p className="text-sm font-semibold text-foreground mb-1">Independent AI Validators</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">Each fetches evidence fresh — no single point of failure.</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">Each fetches evidence fresh - no single point of failure.</p>
             </motion.div>
 
             <motion.div {...reveal(0.14)} className="bento-tile">
               <Globe className="h-5 w-5 text-secondary mb-3" />
               <p className="text-sm font-semibold text-foreground mb-1">Globally Discoverable</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">A factory contract tracks every task — visible to all, on-chain.</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">A factory contract tracks every task - visible to all, on-chain.</p>
             </motion.div>
 
             <motion.div {...reveal(0.2)} className="bento-tile sm:col-span-2 lg:col-span-2">
@@ -282,7 +282,7 @@ const Landing = () => {
         </div>
       </section>
 
-      {/* Final CTA — asymmetric banner */}
+      {/* Final CTA - asymmetric banner */}
       <section className="px-4 sm:px-6 pb-20 sm:pb-28">
         <motion.div
           {...reveal()}
@@ -307,20 +307,14 @@ const Landing = () => {
         </motion.div>
       </section>
 
-      <footer className="border-t border-border/60 px-4 py-6 text-center space-y-2">
+      <footer className="border-t border-border/60 px-4 py-6 text-center">
         <div className="flex items-center justify-center gap-2">
           <img src="/logo.png" alt="ProofWork" className="h-4 w-4 rounded-sm" />
           <span className="text-xs text-muted-foreground">
-            ProofWork — AI-Verified Task Completion on{' '}
+            ProofWork - AI-Verified Task Completion on{' '}
             <a href="https://genlayer.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GenLayer</a>
           </span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Made by{' '}
-          <a href="https://x.com/linoxbt" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-            Lino
-          </a>
-        </p>
       </footer>
     </div>
   );

@@ -143,7 +143,7 @@ const Board = () => {
           <StatTile
             icon={TrendingUp}
             label="Success Rate"
-            value={stats.successRate === null ? '—' : `${stats.successRate}%`}
+            value={stats.successRate === null ? '-' : `${stats.successRate}%`}
             accent="success"
           />
         </div>

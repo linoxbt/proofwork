@@ -11,6 +11,7 @@ interface WalletContextType {
   isConnecting: boolean;
   connect: () => void;
   disconnect: () => void;
+  openAccount: () => void;
   network: NetworkId;
   switchNetwork: (network: NetworkId) => void;
   reownReady: boolean;
@@ -36,7 +37,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const reownReady = isReownConfigured();
 
-  // Sync address + active network from the Reown AppKit modal — the single
+  // Sync address + active network from the Reown AppKit modal - the single
   // source of truth for the connection. Its own UI handles injected-wallet
   // detection (EIP-6963), WalletConnect QR/deep-link, and network switching.
   useEffect(() => {
@@ -78,25 +79,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   // Rebuild the genlayer-js client whenever the connected address or active
   // network changes, using the actual Reown-provided EIP-1193 provider so
-  // writes are signed through the connected wallet.
+  // writes are signed through the connected wallet. getWalletProvider() can
+  // briefly lag right after a fresh connection (subscribeAccount fires before
+  // AppKit's internal ProviderController finishes registering the provider),
+  // so retry a few times before giving up rather than silently leaving
+  // client null.
   useEffect(() => {
     const modal = getAppKit();
     if (!modal || !address) {
       setClient(null);
       return;
     }
-    const provider = modal.getWalletProvider();
-    if (!provider) {
-      setClient(null);
-      return;
-    }
-    setClient(createClient({ chain: NETWORKS[network].chain, account: address as `0x${string}`, provider }));
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const tryBuild = () => {
+      if (cancelled) return;
+      const provider = modal.getWalletProvider();
+      if (provider) {
+        setClient(createClient({ chain: NETWORKS[network].chain, account: address as `0x${string}`, provider }));
+        return;
+      }
+      attempts += 1;
+      if (attempts < 10) {
+        setTimeout(tryBuild, 300);
+      } else {
+        console.error('Wallet provider never became available after connecting.');
+        setClient(null);
+      }
+    };
+
+    tryBuild();
+    return () => { cancelled = true; };
   }, [address, network]);
 
   const connect = useCallback(() => {
     const modal = getAppKit();
     if (!modal) {
-      console.error('Reown AppKit is not configured — set VITE_REOWN_PROJECT_ID to enable wallet connect.');
+      console.error('Reown AppKit is not configured - set VITE_REOWN_PROJECT_ID to enable wallet connect.');
       return;
     }
     setIsConnecting(true);
@@ -107,6 +128,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     getAppKit()?.disconnect().catch(() => {});
     setAddress('');
     setClient(null);
+  }, []);
+
+  // Opens Reown's native Account view - balance, address, network, disconnect -
+  // the same view the wallet button opens in any Reown-powered app.
+  const openAccount = useCallback(() => {
+    getAppKit()?.open({ view: 'Account' });
   }, []);
 
   const switchNetwork = useCallback((target: NetworkId) => {
@@ -130,6 +157,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         isConnecting,
         connect,
         disconnect,
+        openAccount,
         network,
         switchNetwork,
         reownReady,

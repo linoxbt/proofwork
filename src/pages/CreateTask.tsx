@@ -50,7 +50,11 @@ const CreateTask = () => {
   const canDeploy = title && categoryValid && formatValid && description && criteria && deadline;
 
   const handleDeploy = useCallback(async () => {
-    if (!client || !canDeploy || !deadline) {
+    if (!client) {
+      toast.error('Wallet is not ready yet - try reconnecting from the title bar.');
+      return;
+    }
+    if (!canDeploy || !deadline) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -91,10 +95,10 @@ const CreateTask = () => {
   const panel = (
     <>
       <PanelSection title="Preview">
-        <PanelRow label="Title" value={title || '—'} />
-        <PanelRow label="Category" value={category === 'Other' ? (categoryOther || '—') : (category || '—')} />
+        <PanelRow label="Title" value={title || '-'} />
+        <PanelRow label="Category" value={category === 'Other' ? (categoryOther || '-') : (category || '-')} />
         <PanelRow label="Reward" value={`${reward || 0} GEN`} />
-        <PanelRow label="Deadline" value={deadline ? format(deadline, 'MMM d, yyyy p') : '—'} />
+        <PanelRow label="Deadline" value={deadline ? format(deadline, 'MMM d, yyyy p') : '-'} />
         <PanelRow label="Priority" value={priority} />
       </PanelSection>
       <PanelSection title="Escrow" defaultOpen>
@@ -102,7 +106,7 @@ const CreateTask = () => {
           <Lock className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
           <p>
             {reward || 0} GEN will be locked in the TaskFactory contract on deploy. It releases to the
-            worker automatically 24h after verification, if nobody disputes — or refunds you if the
+            worker automatically 24h after verification, if nobody disputes - or refunds you if the
             work is rejected.
           </p>
         </div>

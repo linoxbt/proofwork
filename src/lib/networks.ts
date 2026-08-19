@@ -11,7 +11,7 @@ export interface NetworkConfig {
   gasless: boolean;
 }
 
-// TaskFactory deployed once per network — hardcoded, do not change without
+// TaskFactory deployed once per network - hardcoded, do not change without
 // redeploying (see contracts/task_factory.py, contracts/generate_factory.py).
 export const NETWORKS: Record<NetworkId, NetworkConfig> = {
   asimov: {
@@ -19,7 +19,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     label: 'Asimov Testnet',
     chain: testnetAsimov,
     chainIdHex: `0x${testnetAsimov.id.toString(16)}` as `0x${string}`,
-    factoryAddress: '0x5e005Fb91dc48F50d737C1F29F4D52F768898018',
+    factoryAddress: '0x14218C0bC2680d09FdBC4af5842900ff26F6Ab06',
     gasless: false,
   },
   studionet: {
@@ -27,12 +27,14 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     label: 'Studionet',
     chain: studionet,
     chainIdHex: `0x${studionet.id.toString(16)}` as `0x${string}`,
-    factoryAddress: '0x685A79DD47EA5354aD98f7A1e5329Aa276AF7ffe',
+    factoryAddress: '0xde4313ae7D421A14413040afa0252dFaDca5D8aF',
     gasless: true,
   },
 };
 
-export const DEFAULT_NETWORK: NetworkId = 'asimov';
+// Studionet is gasless and carries the presentation demo tasks; Asimov needs
+// real testnet GEN a first-time visitor won't have yet.
+export const DEFAULT_NETWORK: NetworkId = 'studionet';
 
 const STORAGE_KEY = 'proofwork-network';
 

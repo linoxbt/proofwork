@@ -45,12 +45,12 @@ function NetworkSwitcher() {
 
 export function TitleBar() {
   const navigate = useNavigate();
-  const { isConnected, isConnecting, connect, disconnect, displayAddress } = useWallet();
+  const { isConnected, isConnecting, connect, disconnect, openAccount, displayAddress } = useWallet();
 
   return (
     <header className="h-11 shrink-0 flex items-center justify-between gap-2 px-2 sm:px-3 border-b border-border bg-muted select-none">
       <button
-        onClick={() => navigate('/board')}
+        onClick={() => navigate('/')}
         className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0 shrink-0"
       >
         <img src="/logo.png" alt="" className="h-5 w-5 rounded-[3px] shrink-0" />
@@ -62,10 +62,15 @@ export function TitleBar() {
 
         {isConnected ? (
           <>
-            <div className="flex items-center gap-1.5 h-7 px-2.5 rounded-[4px] bg-background border border-border">
+            <button
+              onClick={openAccount}
+              title="View balance, network, and account"
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-[4px] bg-background border border-border hover:bg-foreground/[0.06] transition-colors"
+            >
               <span className="status-dot bg-success" />
               <span className="text-[11px] font-mono text-foreground whitespace-nowrap">{displayAddress}</span>
-            </div>
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </button>
             <button
               onClick={disconnect}
               title="Disconnect wallet"

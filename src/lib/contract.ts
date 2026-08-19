@@ -114,7 +114,7 @@ export async function createTaskViaFactory(
   assertTxSucceeded(receipt, 'Task creation');
 
   // The factory returns the new child address as the call's return value, but
-  // the receipt doesn't surface it directly for a plain writeContract call —
+  // the receipt doesn't surface it directly for a plain writeContract call -
   // read the factory's task list and take the newest entry instead.
   const readClient = getReadOnlyClient(network);
   const tasks: string[] = await readClient.readContract({

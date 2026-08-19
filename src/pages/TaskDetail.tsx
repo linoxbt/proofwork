@@ -31,7 +31,7 @@ const RELEASE_WINDOW_SECONDS = 86400;
 
 // Tasks deployed before the `deadline` field existed on-chain read back as
 // undefined/0, which produces an Invalid Date and throws in date-fns's
-// format() — guard against that instead of crashing the whole page.
+// format() - guard against that instead of crashing the whole page.
 function formatDeadline(deadline: number | undefined): string {
   if (!deadline || !Number.isFinite(deadline)) return 'No deadline set';
   const date = new Date(deadline * 1000);
@@ -134,7 +134,7 @@ const TaskDetail = () => {
     setVerifying(true);
     setShowVerification(true);
     try {
-      toast.info('AI validators are fetching and analyzing the evidence — this can take a minute…');
+      toast.info('AI validators are fetching and analyzing the evidence - this can take a minute…');
       await requestVerification(client, contractAddr);
       toast.success('AI verification complete!');
       await refresh();
@@ -205,14 +205,14 @@ const TaskDetail = () => {
     <>
       <PanelSection title="Properties">
         <PanelRow label="Status" value={<StatusBadge status={task.status} />} />
-        <PanelRow label="Category" value={category || '—'} />
-        <PanelRow label="Priority" value={task.priority || '—'} />
-        <PanelRow label="Effort" value={task.estimated_effort || '—'} />
-        <PanelRow label="Evidence Format" value={submissionFormat || '—'} />
+        <PanelRow label="Category" value={category || '-'} />
+        <PanelRow label="Priority" value={task.priority || '-'} />
+        <PanelRow label="Effort" value={task.estimated_effort || '-'} />
+        <PanelRow label="Evidence Format" value={submissionFormat || '-'} />
         <PanelRow label="Reward" value={`${task.reward_amount} GEN`} />
         <PanelRow label="Deadline" value={formatDeadline(task.deadline)} />
         <PanelRow label="Creator" value={`${task.creator.slice(0, 6)}…${task.creator.slice(-4)}`} />
-        <PanelRow label="Worker" value={task.worker ? `${task.worker.slice(0, 6)}…${task.worker.slice(-4)}` : '—'} />
+        <PanelRow label="Worker" value={task.worker ? `${task.worker.slice(0, 6)}…${task.worker.slice(-4)}` : '-'} />
       </PanelSection>
       {escrow && (
         <PanelSection title="Escrow">
@@ -301,7 +301,7 @@ const TaskDetail = () => {
           <CodeCard title="Submit Work" variant="blue">
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Submit your {submissionFormat?.toLowerCase() || 'evidence'} URL. Once submitted, this is locked —
+                Submit your {submissionFormat?.toLowerCase() || 'evidence'} URL. Once submitted, this is locked -
                 verification is triggered separately by either party.
               </p>
               <Input
@@ -399,7 +399,7 @@ const TaskDetail = () => {
                 <p className="text-sm text-foreground/85">
                   {escrow.lockedAmount} GEN is locked, payable to {task.status === 'verified' ? 'the worker' : 'the creator (refund)'}.
                   {releaseEligible
-                    ? ' The 24h dispute window has passed — anyone can release it now.'
+                    ? ' The 24h dispute window has passed - anyone can release it now.'
                     : releaseEligibleAt
                       ? ` Releases automatically ${formatDistanceToNowStrict(new Date(releaseEligibleAt * 1000), { addSuffix: true })} if not disputed.`
                       : ''}

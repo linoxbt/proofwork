@@ -26,7 +26,7 @@ new_factory_source = re.sub(
 )
 
 if new_factory_source == factory_source:
-    raise SystemExit("TASK_VERIFIER_CODE_B64 marker not found in task_factory.py — nothing replaced")
+    raise SystemExit("TASK_VERIFIER_CODE_B64 marker not found in task_factory.py - nothing replaced")
 
 FACTORY_PATH.write_text(new_factory_source)
 print(f"Embedded {len(verifier_source)} bytes of task_verifier.py ({len(encoded)} b64 chars) into task_factory.py")

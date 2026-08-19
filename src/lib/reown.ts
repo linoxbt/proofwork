@@ -3,7 +3,7 @@ import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { defineChain } from '@reown/appkit/networks';
 import { NETWORKS } from '@/lib/networks';
 
-// GenLayer networks, defined for Reown AppKit — mirrors genlayer-js's own
+// GenLayer networks, defined for Reown AppKit - mirrors genlayer-js's own
 // chain definitions (src/lib/networks.ts) so the wallet and the RPC client
 // always agree on chain id / RPC / explorer.
 const genlayerAsimov = defineChain({
@@ -36,7 +36,7 @@ const projectId = import.meta.env.VITE_REOWN_PROJECT_ID as string | undefined;
 
 let appKit: ReturnType<typeof createAppKit> | null = null;
 
-// ProofWork connects wallets exclusively through Reown AppKit (WalletConnect) —
+// ProofWork connects wallets exclusively through Reown AppKit (WalletConnect) -
 // its own modal handles injected wallets (via EIP-6963 auto-detection), the
 // WalletConnect QR/deep-link flow for mobile, and network switching between
 // both GenLayer networks natively. Requires a free project ID from
@@ -47,7 +47,7 @@ export function getAppKit() {
     appKit = createAppKit({
       adapters: [new EthersAdapter()],
       networks: [genlayerAsimov, genlayerStudionet],
-      defaultNetwork: genlayerAsimov,
+      defaultNetwork: genlayerStudionet,
       projectId,
       metadata: {
         name: 'ProofWork',

@@ -1,17 +1,17 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
-# AI-Verified Task Completion — GenLayer Intelligent Contract
-# Deployed as a child of TaskFactory (see task_factory.py) — not deployed directly.
+# AI-Verified Task Completion - GenLayer Intelligent Contract
+# Deployed as a child of TaskFactory (see task_factory.py) - not deployed directly.
 
 from genlayer import *
 
 from datetime import datetime, timezone
 import json
 
-ERROR_EXPECTED = "[EXPECTED]"  # business logic — deterministic, exact match
-ERROR_EXTERNAL = "[EXTERNAL]"  # external API 4xx — deterministic, exact match
-ERROR_TRANSIENT = "[TRANSIENT]"  # network/5xx — non-deterministic, agree if both transient
-ERROR_LLM = "[LLM_ERROR]"  # LLM misbehavior — always disagree, force rotation
+ERROR_EXPECTED = "[EXPECTED]"  # business logic - deterministic, exact match
+ERROR_EXTERNAL = "[EXTERNAL]"  # external API 4xx - deterministic, exact match
+ERROR_TRANSIENT = "[TRANSIENT]"  # network/5xx - non-deterministic, agree if both transient
+ERROR_LLM = "[LLM_ERROR]"  # LLM misbehavior - always disagree, force rotation
 
 
 class TaskVerifier(gl.Contract):
@@ -171,7 +171,7 @@ class TaskVerifier(gl.Contract):
                 dispute_context = f"""
 This submission was DISPUTED by one of the parties. Re-examine the evidence
 carefully in light of the dispute reason below, and do not simply repeat a
-prior verdict — form your own independent judgment from the current evidence.
+prior verdict - form your own independent judgment from the current evidence.
 
 DISPUTE REASON: {dispute_reason}
 """
