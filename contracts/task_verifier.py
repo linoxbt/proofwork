@@ -30,6 +30,7 @@ class TaskVerifier(gl.Contract):
     deadline: u256  # unix timestamp; worker must submit before this
     worker: str
     submission_url: str
+    submission_note: str
     status: str  # "open", "claimed", "submitted", "verified", "rejected", "disputed"
     verification_result: str
     dispute_count: u256
@@ -70,6 +71,7 @@ class TaskVerifier(gl.Contract):
         self.deadline = deadline
         self.worker = ""
         self.submission_url = ""
+        self.submission_note = ""
         self.status = "open"
         self.verification_result = ""
         self.dispute_count = 0
@@ -88,13 +90,23 @@ class TaskVerifier(gl.Contract):
         self.status = "claimed"
 
     @gl.public.write
-    def submit_work(self, evidence_url: str) -> None:
+    def submit_work(self, evidence_url: str, submission_note: str) -> None:
         caller = str(gl.message.sender_address)
         now = int(datetime.now(timezone.utc).timestamp())
         assert caller == self.worker, "Only assigned worker can submit"
         assert self.status == "claimed", "Task must be claimed first"
         assert now <= self.deadline, "Task deadline has passed"
+
+        url_lower = evidence_url.lower().strip()
+        assert url_lower.startswith("http://") or url_lower.startswith("https://"), \
+            "Evidence must be a valid URL"
+        expected_format = self.submission_format
+        if expected_format == "GitHub Repository":
+            assert "github.com" in url_lower, \
+                "This task expects a GitHub Repository URL (github.com)"
+
         self.submission_url = evidence_url
+        self.submission_note = submission_note
         self.status = "submitted"
         # Evidence is now locked in. AI verification must be triggered separately
         # via request_verification() by either the creator or the worker.
@@ -126,6 +138,16 @@ class TaskVerifier(gl.Contract):
 
     @gl.public.view
     def get_task_state(self) -> dict:
+        caller = str(gl.message.sender_address)
+        is_party = caller == self.creator or caller == self.worker
+        # Submitted evidence is only meaningful to hide once something has
+        # actually been submitted - an empty string already means "nothing
+        # submitted yet" for open/claimed tasks, so only redact when there's
+        # something real to redact.
+        hide_evidence = self.submission_url != "" and not is_party
+        evidence_url = "[private]" if hide_evidence else self.submission_url
+        evidence_note = "[private]" if hide_evidence else self.submission_note
+
         return {
             "creator": self.creator,
             "factory": self.factory,
@@ -141,7 +163,8 @@ class TaskVerifier(gl.Contract):
             "reward_amount": self.reward_amount,
             "deadline": self.deadline,
             "worker": self.worker,
-            "submission_url": self.submission_url,
+            "submission_url": evidence_url,
+            "submission_note": evidence_note,
             "status": self.status,
             "verification_result": self.verification_result,
             "dispute_count": self.dispute_count,
@@ -155,6 +178,7 @@ class TaskVerifier(gl.Contract):
         description = self.description
         criteria = self.criteria
         submission_url = self.submission_url
+        submission_note = self.submission_note
         submission_format = self.submission_format_other or self.submission_format
         dispute_reason = self.dispute_reason
         is_redispute = self.dispute_count > 0
@@ -176,6 +200,8 @@ prior verdict - form your own independent judgment from the current evidence.
 DISPUTE REASON: {dispute_reason}
 """
 
+            note_context = f"\nWORKER'S NOTE: {submission_note}\n" if submission_note else ""
+
             prompt = f"""You are an AI reviewer verifying task completion.
 
 TASK TITLE: {title}
@@ -184,7 +210,7 @@ COMPLETION CRITERIA: {criteria}
 EXPECTED EVIDENCE FORMAT: {submission_format}
 
 SUBMITTED EVIDENCE URL: {submission_url}
-{dispute_context}
+{note_context}{dispute_context}
 EVIDENCE CONTENT:
 {web_data[:8000]}
 

@@ -15,7 +15,11 @@ for 24 hours.
    transaction and locked in escrow immediately.
 2. **Claim** - any other address can claim the open task.
 3. **Submit evidence** - the worker submits a URL (GitHub repo, live app, video, doc - whatever
-   format the task specifies). This locks the submission; nothing else can be changed after.
+   format the task specifies) plus an optional note describing what they built. The contract
+   enforces the expected format where it can be checked deterministically (e.g. a GitHub
+   Repository submission must be a `github.com` URL). This locks the submission; nothing else
+   can be changed after. The evidence and note are only ever readable by the task's creator and
+   worker - anyone else calling `get_task_state()` sees them redacted as `[private]`.
 4. **Request verification** - *either* the creator or the worker can trigger AI verification at
    any time after submission. Independent GenLayer validators fetch the evidence fresh, judge it
    against the rubric, and reach consensus on a verdict (with a confidence score and reasoning).
@@ -58,8 +62,8 @@ never deploys a new factory, only new tasks through the existing one.
 
 | Network | Chain ID | Factory address |
 |---|---|---|
-| GenLayer Asimov Testnet | 4221 | `0x14218C0bC2680d09FdBC4af5842900ff26F6Ab06` |
-| GenLayer Studionet | 61999 | `0xde4313ae7D421A14413040afa0252dFaDca5D8aF` |
+| GenLayer Asimov Testnet | 4221 | `0x5c47F77BC204f30801533a274db8D7081BC76A08` |
+| GenLayer Studionet | 61999 | `0x72965A3118dA58bAe38C95078638dA3c86d317c3` |
 
 Switch between them from the network badge in the app's title bar. Studionet is a free, gasless
 environment good for trying the full flow without real funds.

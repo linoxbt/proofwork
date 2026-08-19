@@ -30,6 +30,7 @@ export interface ContractTaskState {
   deadline: number;
   worker: string;
   submission_url: string;
+  submission_note: string;
   status: 'open' | 'claimed' | 'submitted' | 'verified' | 'rejected' | 'disputed';
   verification_result: string;
   dispute_count: number;
@@ -37,6 +38,10 @@ export interface ContractTaskState {
   created_at: number;
   verified_at: number;
 }
+
+// Matches the contract's redaction sentinel in get_task_state() - evidence is
+// only visible to the task's creator/worker, everyone else sees this instead.
+export const PRIVATE_EVIDENCE = '[private]';
 
 export interface VerificationResult {
   verified: boolean;
@@ -174,12 +179,13 @@ export async function claimTask(client: any, contractAddress: string): Promise<s
 export async function submitWork(
   client: any,
   contractAddress: string,
-  evidenceUrl: string
+  evidenceUrl: string,
+  submissionNote: string
 ): Promise<string> {
   const txHash = await client.writeContract({
     address: contractAddress,
     functionName: 'submit_work',
-    args: [evidenceUrl],
+    args: [evidenceUrl, submissionNote],
     value: 0,
   });
   const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });

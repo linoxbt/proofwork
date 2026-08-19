@@ -18,12 +18,13 @@ import {
   getTaskState,
   getEscrowStatus,
   getReadOnlyClient,
+  PRIVATE_EVIDENCE,
   type ContractTaskState,
   type VerificationResult,
   type EscrowStatus,
 } from '@/lib/contract';
 import {
-  CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins, ScanSearch, Gavel, Lock, Unlock,
+  CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins, ScanSearch, Gavel, Lock, Unlock, EyeOff,
 } from 'lucide-react';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 
@@ -44,6 +45,7 @@ const TaskDetail = () => {
   const navigate = useNavigate();
   const { address, client, isConnected, connect, network } = useWallet();
   const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [submissionNote, setSubmissionNote] = useState('');
   const [disputeReason, setDisputeReason] = useState('');
   const [claiming, setClaiming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -100,6 +102,13 @@ const TaskDetail = () => {
 
   const category = task?.category === 'Other' ? task.category_other : task?.category;
   const submissionFormat = task?.submission_format === 'Other' ? task?.submission_format_other : task?.submission_format;
+  const evidenceIsPrivate = task?.submission_url === PRIVATE_EVIDENCE;
+  const evidenceUrlPlaceholder =
+    task?.submission_format === 'GitHub Repository'
+      ? 'https://github.com/username/repo'
+      : task?.submission_format === 'Live URL / Deployed App'
+        ? 'https://your-app.example.com'
+        : 'https://…';
 
   const handleClaim = useCallback(async () => {
     if (!client || !contractAddr) return;
@@ -119,7 +128,7 @@ const TaskDetail = () => {
     if (!client || !contractAddr || !evidenceUrl) return;
     setSubmitting(true);
     try {
-      await submitWork(client, contractAddr, evidenceUrl);
+      await submitWork(client, contractAddr, evidenceUrl, submissionNote);
       toast.success('Evidence submitted and locked. Either party can now request AI verification.');
       await refresh();
     } catch (err: any) {
@@ -127,7 +136,7 @@ const TaskDetail = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [client, contractAddr, evidenceUrl, refresh]);
+  }, [client, contractAddr, evidenceUrl, submissionNote, refresh]);
 
   const handleRequestVerification = useCallback(async () => {
     if (!client || !contractAddr) return;
@@ -301,15 +310,28 @@ const TaskDetail = () => {
           <CodeCard title="Submit Work" variant="blue">
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Submit your {submissionFormat?.toLowerCase() || 'evidence'} URL. Once submitted, this is locked -
-                verification is triggered separately by either party.
+                This task expects <strong className="text-foreground">{submissionFormat || 'a URL'}</strong> as
+                evidence. Once submitted, this is locked and only visible to you and the creator - verification
+                is triggered separately by either party.
               </p>
-              <Input
-                value={evidenceUrl}
-                onChange={(e) => setEvidenceUrl(e.target.value)}
-                placeholder="https://github.com/username/repo"
-                className="bg-background border-border text-sm font-mono"
-              />
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Evidence URL</label>
+                <Input
+                  value={evidenceUrl}
+                  onChange={(e) => setEvidenceUrl(e.target.value)}
+                  placeholder={evidenceUrlPlaceholder}
+                  className="bg-background border-border text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Notes (optional)</label>
+                <Textarea
+                  value={submissionNote}
+                  onChange={(e) => setSubmissionNote(e.target.value)}
+                  placeholder="Anything the reviewer should know - what you built, how to test it, known limitations…"
+                  className="bg-background border-border text-sm min-h-[70px]"
+                />
+              </div>
               <button
                 onClick={handleSubmit}
                 disabled={submitting || !evidenceUrl}
@@ -377,7 +399,14 @@ const TaskDetail = () => {
                 <p className="text-sm text-foreground/85 leading-relaxed">{verification.reasoning}</p>
               </div>
 
-              {task.submission_url && (
+              {task.submission_note && task.submission_note !== PRIVATE_EVIDENCE && (
+                <div className="bg-muted/40 rounded p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Worker's Note</p>
+                  <p className="text-sm text-foreground/85 leading-relaxed">{task.submission_note}</p>
+                </div>
+              )}
+
+              {task.submission_url && !evidenceIsPrivate && (
                 <a
                   href={task.submission_url}
                   target="_blank"
@@ -386,6 +415,11 @@ const TaskDetail = () => {
                 >
                   <ExternalLink className="h-3 w-3" /> {task.submission_url}
                 </a>
+              )}
+              {evidenceIsPrivate && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <EyeOff className="h-3.5 w-3.5" /> Evidence is private to the task's creator and worker.
+                </p>
               )}
             </div>
           </CodeCard>

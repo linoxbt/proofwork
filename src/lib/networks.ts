@@ -19,7 +19,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     label: 'Asimov Testnet',
     chain: testnetAsimov,
     chainIdHex: `0x${testnetAsimov.id.toString(16)}` as `0x${string}`,
-    factoryAddress: '0x14218C0bC2680d09FdBC4af5842900ff26F6Ab06',
+    factoryAddress: '0x5c47F77BC204f30801533a274db8D7081BC76A08',
     gasless: false,
   },
   studionet: {
@@ -27,7 +27,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     label: 'Studionet',
     chain: studionet,
     chainIdHex: `0x${studionet.id.toString(16)}` as `0x${string}`,
-    factoryAddress: '0xde4313ae7D421A14413040afa0252dFaDca5D8aF',
+    factoryAddress: '0x72965A3118dA58bAe38C95078638dA3c86d317c3',
     gasless: true,
   },
 };
