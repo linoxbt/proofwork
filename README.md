@@ -1,73 +1,136 @@
-# Welcome to your Lovable project
+# ProofWork
 
-## Project info
+**AI-verified task completion with real GEN escrow, built on GenLayer Intelligent Contracts.**
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+ProofWork is an on-chain task board: a creator posts work with a rubric and a reward, a worker
+claims and submits evidence, and independent AI validators — not a human moderator — fetch that
+evidence and reach consensus on whether it satisfies the rubric. The reward is real GEN, locked in
+escrow from the moment the task is created, and only released once a verdict has stood unchallenged
+for 24 hours.
 
-## How can I edit this code?
+## How it works
 
-There are several ways of editing your application.
+1. **Post & fund** — a creator describes the task, sets a rubric, a deadline, and a reward, then
+   deploys it through the `TaskFactory` contract. The reward (in GEN) is sent with that same
+   transaction and locked in escrow immediately.
+2. **Claim** — any other address can claim the open task.
+3. **Submit evidence** — the worker submits a URL (GitHub repo, live app, video, doc — whatever
+   format the task specifies). This locks the submission; nothing else can be changed after.
+4. **Request verification** — *either* the creator or the worker can trigger AI verification at
+   any time after submission. Independent GenLayer validators fetch the evidence fresh, judge it
+   against the rubric, and reach consensus on a verdict (with a confidence score and reasoning).
+5. **Dispute (optional)** — if either party disagrees with the verdict, they can file a dispute
+   with a reason. This blocks the escrow release and the next verification run is given that
+   reason as context, so it's a genuine re-review, not a repeat.
+6. **Escrow releases** — 24 hours after a verdict stands undisputed, anyone can call
+   `release_funds`. Verified tasks pay the worker; rejected tasks refund the creator.
 
-**Use Lovable**
+## Architecture
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### Contracts (`contracts/`)
 
-Changes made via Lovable will be committed automatically to this repo.
+- **`task_factory.py`** — deployed once per network, this is the contract address the frontend
+  actually talks to. It's the money custodian and the global task registry:
+  - `create_task(...)` — `@gl.public.write.payable`. Asserts the attached GEN value matches the
+    stated reward, deploys a new `TaskVerifier` child via `gl.deploy_contract(...)`, and records
+    the escrow against that child's address.
+  - `release_funds(task_address)` — reads the child's live state via a cross-contract view call,
+    checks the 24h window and dispute status, then pays out via `emit_transfer`.
+  - `get_all_tasks()` / `get_escrow_status(address)` — the views the frontend uses for global,
+    all-users task discovery (no off-chain indexer or per-browser storage involved).
+- **`task_verifier.py`** — the child contract holding one task's state machine
+  (`open → claimed → submitted → verified/rejected ⇄ disputed`) and the AI verification logic
+  itself, using `gl.nondet.web.render()` to fetch evidence and `gl.nondet.exec_prompt()` +
+  `gl.eq_principle.prompt_comparative()` for the actual judgment, so validators independently
+  re-derive a verdict and must agree rather than trusting a single leader's answer.
+- **`generate_factory.py`** — `task_verifier.py` is the single source of truth for the child
+  contract; this script base64-embeds its current source into `task_factory.py` (as
+  `TASK_VERIFIER_CODE_B64`) so the factory can deploy it. Run it after any change to
+  `task_verifier.py`:
+  ```bash
+  python3 contracts/generate_factory.py
+  ```
 
-**Use your preferred IDE**
+### Deployed addresses
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+The factory is deployed once per network and hardcoded in `src/lib/networks.ts` — the frontend
+never deploys a new factory, only new tasks through the existing one.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+| Network | Chain ID | Factory address |
+|---|---|---|
+| GenLayer Asimov Testnet | 4221 | `0x5e005Fb91dc48F50d737C1F29F4D52F768898018` |
+| GenLayer Studionet | 61999 | `0x685A79DD47EA5354aD98f7A1e5329Aa276AF7ffe` |
 
-Follow these steps:
+Switch between them from the network badge in the app's title bar. Studionet is a free, gasless
+environment good for trying the full flow without real funds.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Frontend (`src/`)
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+- **Shell** (`src/components/shell/`) — a persona-tab desktop-app-style shell (Board / Create /
+  Dashboard / About) rather than a single-page marketing layout, wrapping every in-app page.
+- **`src/lib/contract.ts`** — all factory + child contract calls, network-parameterized, with a
+  `assertTxSucceeded` guard: a GenLayer transaction can reach `ACCEPTED` status while the actual
+  contract call reverted (most visible on the AI-verification path's validator rounds), so every
+  write checks the leader's real execution result before reporting success.
+- **`src/lib/networks.ts`** — the two networks' chain definitions and hardcoded factory addresses.
+- **`src/lib/reown.ts` + `src/contexts/WalletContext.tsx`** — wallet connection is exclusively
+  through [Reown AppKit](https://cloud.reown.com) (WalletConnect). Its modal handles injected
+  wallet detection, the WalletConnect QR/deep-link flow for mobile, and switching between the two
+  GenLayer networks natively.
+- **`src/hooks/useTasks.ts`** — fetches every task from the active network's factory plus its
+  escrow status, used by the Board, Dashboard, and Landing page's live stats.
 
-# Step 3: Install the necessary dependencies.
-npm i
+## Tech stack
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+- React 18 + TypeScript + Vite, Tailwind CSS + shadcn/ui, Framer Motion
+- `genlayer-js` for all contract reads/writes
+- `@reown/appkit` + `@reown/appkit-adapter-ethers` for wallet connection
+- Python (GenVM) intelligent contracts, deployed via the `genlayer` CLI
+
+## Local development
+
+```bash
+bun install       # or npm install
+bun run dev        # or npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Environment variables (`.env`)
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+# Required for wallet connect to work at all — get a free one at https://cloud.reown.com
+VITE_REOWN_PROJECT_ID=""
 
-**Use GitHub Codespaces**
+# Supabase project (provisioned, not currently load-bearing for app logic)
+VITE_SUPABASE_PROJECT_ID="..."
+VITE_SUPABASE_PUBLISHABLE_KEY="..."
+VITE_SUPABASE_URL="..."
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Without `VITE_REOWN_PROJECT_ID` set, the app runs but wallet connect is disabled — reads (Board,
+task detail, stats) still work against either network without a connected wallet.
 
-## What technologies are used for this project?
+### Working on the contracts
 
-This project is built with:
+```bash
+# Lint after any contract change
+uvx --from genvm-linter genvm-lint check contracts/task_verifier.py
+uvx --from genvm-linter genvm-lint check contracts/task_factory.py
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Re-embed task_verifier.py into task_factory.py after editing the former
+python3 contracts/generate_factory.py
 
-## How can I deploy this project?
+# Deploy (see GenLayer CLI docs for account/network setup)
+genlayer deploy --contract contracts/task_factory.py
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+If you deploy a new factory, update the address in `src/lib/networks.ts` and this README.
 
-## Can I connect a custom domain to my Lovable project?
+## Deploying the frontend
 
-Yes, you can!
+A `netlify.toml` is included with a SPA redirect (`/* → /index.html`) so client-side routes like
+`/create` or `/task/:address` don't 404 on a direct load or refresh. Set `VITE_REOWN_PROJECT_ID` in
+your host's environment variables.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## License
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+MIT

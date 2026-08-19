@@ -1,6 +1,6 @@
 import { AppShell } from '@/components/shell/AppShell';
 import { CodeCard } from '@/components/CodeCard';
-import { Shield, Cpu, Users, Globe, Lock } from 'lucide-react';
+import { Shield, Cpu, Users, Globe, Lock, Gavel, Clock } from 'lucide-react';
 
 const HOW_IT_WORKS = [
   {
@@ -11,7 +11,7 @@ const HOW_IT_WORKS = [
   {
     icon: Cpu,
     title: 'AI Validators',
-    desc: 'Multiple independent AI validators analyze your GitHub submission. Each validator fetches the repo, reads the code, and evaluates it against the task criteria.',
+    desc: 'Multiple independent AI validators analyze your submitted evidence. Each fetches it fresh and evaluates it against the task criteria.',
   },
   {
     icon: Users,
@@ -20,13 +20,23 @@ const HOW_IT_WORKS = [
   },
   {
     icon: Lock,
-    title: 'Trustless & Permissionless',
-    desc: 'No human reviewers, no central authority. The verification is fully decentralized and deterministic. Anyone can post tasks, anyone can submit work.',
+    title: 'Real Escrow',
+    desc: 'A TaskFactory contract holds the reward in GEN from the moment a task is created — not just a display number.',
+  },
+  {
+    icon: Clock,
+    title: '24h Dispute Window',
+    desc: 'After a verdict, escrow stays locked for 24 hours. Anyone can then trigger the release — to the worker if verified, refunded to the creator if rejected.',
+  },
+  {
+    icon: Gavel,
+    title: 'Built-in Disputes',
+    desc: 'Disagree with a verdict? File a dispute with your reasoning inside the window — it blocks the release and triggers an informed re-review.',
   },
 ];
 
 const PIPELINE = [
-  { label: 'gl.nondet.web.render()', desc: 'Fetches the submitted GitHub repository content directly from within the smart contract' },
+  { label: 'gl.nondet.web.render()', desc: 'Fetches the submitted evidence URL directly from within the smart contract' },
   { label: 'gl.nondet.exec_prompt()', desc: 'Runs AI analysis on the fetched code against the task\'s specified criteria' },
   { label: 'gl.eq_principle.prompt_comparative()', desc: 'Independent validators re-derive the result and compare it against the leader\'s answer' },
   { label: 'On-chain result', desc: 'Verification outcome is stored immutably on the GenLayer blockchain' },
@@ -44,7 +54,7 @@ const About = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {HOW_IT_WORKS.map((item) => (
             <CodeCard key={item.title} title={item.title}>
               <div className="flex items-start gap-3">
@@ -75,7 +85,7 @@ const About = () => {
         <div className="flex items-center gap-3 px-4 py-3 rounded border border-border bg-card">
           <Shield className="h-4 w-4 text-primary shrink-0" />
           <p className="text-xs text-muted-foreground">
-            Built on <a href="https://genlayer.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GenLayer</a> · Asimov Testnet ·{' '}
+            Built on <a href="https://genlayer.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GenLayer</a> · deployed on Asimov Testnet & Studionet ·{' '}
             <a href="https://studio.genlayer.com" target="_blank" rel="noopener noreferrer" className="text-secondary hover:underline">Try GenLayer Studio →</a>
           </p>
         </div>

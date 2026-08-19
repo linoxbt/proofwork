@@ -1,9 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutGrid, PlusSquare, BookOpen } from 'lucide-react';
+import { LayoutGrid, PlusSquare, BookOpen, LayoutDashboard } from 'lucide-react';
 
 const PERSONAS = [
   { path: '/board', label: 'Board', icon: LayoutGrid },
   { path: '/create', label: 'Create', icon: PlusSquare },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/about', label: 'About', icon: BookOpen },
 ];
 

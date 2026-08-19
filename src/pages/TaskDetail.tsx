@@ -14,13 +14,20 @@ import {
   submitWork,
   requestVerification,
   disputeTask,
+  releaseFunds,
   getTaskState,
+  getEscrowStatus,
   getReadOnlyClient,
   type ContractTaskState,
   type VerificationResult,
+  type EscrowStatus,
 } from '@/lib/contract';
-import { CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins, ScanSearch, Gavel } from 'lucide-react';
-import { format } from 'date-fns';
+import {
+  CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins, ScanSearch, Gavel, Lock, Unlock,
+} from 'lucide-react';
+import { format, formatDistanceToNowStrict } from 'date-fns';
+
+const RELEASE_WINDOW_SECONDS = 86400;
 
 // Tasks deployed before the `deadline` field existed on-chain read back as
 // undefined/0, which produces an Invalid Date and throws in date-fns's
@@ -29,34 +36,40 @@ function formatDeadline(deadline: number | undefined): string {
   if (!deadline || !Number.isFinite(deadline)) return 'No deadline set';
   const date = new Date(deadline * 1000);
   if (Number.isNaN(date.getTime())) return 'No deadline set';
-  return format(date, 'MMM d, yyyy');
+  return format(date, 'MMM d, yyyy p');
 }
 
 const TaskDetail = () => {
   const { address: contractAddr } = useParams();
   const navigate = useNavigate();
-  const { address, client, isConnected, connect } = useWallet();
-  const [githubUrl, setGithubUrl] = useState('');
+  const { address, client, isConnected, connect, network } = useWallet();
+  const [evidenceUrl, setEvidenceUrl] = useState('');
   const [disputeReason, setDisputeReason] = useState('');
   const [claiming, setClaiming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [disputing, setDisputing] = useState(false);
+  const [releasing, setReleasing] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [task, setTask] = useState<ContractTaskState | null>(null);
+  const [escrow, setEscrow] = useState<EscrowStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!contractAddr) return;
     try {
-      const state = await getTaskState(client ?? getReadOnlyClient(), contractAddr);
+      const [state, escrowStatus] = await Promise.all([
+        getTaskState(client ?? getReadOnlyClient(network), contractAddr),
+        getEscrowStatus(network, contractAddr),
+      ]);
       setTask(state);
+      setEscrow(escrowStatus);
     } catch {
       setTask(null);
     } finally {
       setLoading(false);
     }
-  }, [contractAddr, client]);
+  }, [contractAddr, client, network]);
 
   useEffect(() => {
     refresh();
@@ -76,6 +89,18 @@ const TaskDetail = () => {
     (task?.status === 'submitted' || task?.status === 'disputed') && isConnected && isParty;
   const canDispute = (task?.status === 'verified' || task?.status === 'rejected') && isConnected && isParty;
 
+  const releaseEligibleAt = task && task.verified_at > 0 ? task.verified_at + RELEASE_WINDOW_SECONDS : null;
+  const releaseEligible = releaseEligibleAt !== null && Date.now() / 1000 >= releaseEligibleAt;
+  const canRelease =
+    isConnected &&
+    escrow &&
+    !escrow.released &&
+    (task?.status === 'verified' || task?.status === 'rejected') &&
+    releaseEligible;
+
+  const category = task?.category === 'Other' ? task.category_other : task?.category;
+  const submissionFormat = task?.submission_format === 'Other' ? task?.submission_format_other : task?.submission_format;
+
   const handleClaim = useCallback(async () => {
     if (!client || !contractAddr) return;
     setClaiming(true);
@@ -91,10 +116,10 @@ const TaskDetail = () => {
   }, [client, contractAddr, refresh]);
 
   const handleSubmit = useCallback(async () => {
-    if (!client || !contractAddr || !githubUrl) return;
+    if (!client || !contractAddr || !evidenceUrl) return;
     setSubmitting(true);
     try {
-      await submitWork(client, contractAddr, githubUrl);
+      await submitWork(client, contractAddr, evidenceUrl);
       toast.success('Evidence submitted and locked. Either party can now request AI verification.');
       await refresh();
     } catch (err: any) {
@@ -102,7 +127,7 @@ const TaskDetail = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [client, contractAddr, githubUrl, refresh]);
+  }, [client, contractAddr, evidenceUrl, refresh]);
 
   const handleRequestVerification = useCallback(async () => {
     if (!client || !contractAddr) return;
@@ -137,6 +162,20 @@ const TaskDetail = () => {
     }
   }, [client, contractAddr, disputeReason, refresh]);
 
+  const handleRelease = useCallback(async () => {
+    if (!client || !contractAddr) return;
+    setReleasing(true);
+    try {
+      await releaseFunds(client, network, contractAddr);
+      toast.success('Escrow released!');
+      await refresh();
+    } catch (err: any) {
+      toast.error(`Release failed: ${err.message}`);
+    } finally {
+      setReleasing(false);
+    }
+  }, [client, contractAddr, network, refresh]);
+
   if (loading) {
     return (
       <AppShell breadcrumb="Board / Loading…">
@@ -166,12 +205,21 @@ const TaskDetail = () => {
     <>
       <PanelSection title="Properties">
         <PanelRow label="Status" value={<StatusBadge status={task.status} />} />
-        <PanelRow label="Category" value={task.category || '—'} />
+        <PanelRow label="Category" value={category || '—'} />
+        <PanelRow label="Priority" value={task.priority || '—'} />
+        <PanelRow label="Effort" value={task.estimated_effort || '—'} />
+        <PanelRow label="Evidence Format" value={submissionFormat || '—'} />
         <PanelRow label="Reward" value={`${task.reward_amount} GEN`} />
         <PanelRow label="Deadline" value={formatDeadline(task.deadline)} />
         <PanelRow label="Creator" value={`${task.creator.slice(0, 6)}…${task.creator.slice(-4)}`} />
         <PanelRow label="Worker" value={task.worker ? `${task.worker.slice(0, 6)}…${task.worker.slice(-4)}` : '—'} />
       </PanelSection>
+      {escrow && (
+        <PanelSection title="Escrow">
+          <PanelRow label="Locked" value={`${escrow.lockedAmount} GEN`} />
+          <PanelRow label="Released" value={escrow.released ? 'Yes' : 'No'} />
+        </PanelSection>
+      )}
       {verification && (
         <PanelSection title="Verification">
           <PanelRow label="Result" value={verification.verified ? 'Verified' : 'Rejected'} />
@@ -225,6 +273,11 @@ const TaskDetail = () => {
 
         <CodeCard title="Task Specification">
           <div className="space-y-4 text-sm">
+            <div className="flex flex-wrap gap-1.5">
+              {category && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{category}</span>}
+              {task.priority && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{task.priority} priority</span>}
+              {task.estimated_effort && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{task.estimated_effort}</span>}
+            </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Description</p>
               <p className="text-foreground/85 leading-relaxed">{task.description}</p>
@@ -235,6 +288,12 @@ const TaskDetail = () => {
                 {task.criteria}
               </pre>
             </div>
+            {submissionFormat && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Expected Evidence Format</p>
+                <p className="text-foreground/85">{submissionFormat}</p>
+              </div>
+            )}
           </div>
         </CodeCard>
 
@@ -242,18 +301,18 @@ const TaskDetail = () => {
           <CodeCard title="Submit Work" variant="blue">
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Submit your GitHub repository URL as evidence. Once submitted, this is locked — verification
-                is triggered separately by either party.
+                Submit your {submissionFormat?.toLowerCase() || 'evidence'} URL. Once submitted, this is locked —
+                verification is triggered separately by either party.
               </p>
               <Input
-                value={githubUrl}
-                onChange={(e) => setGithubUrl(e.target.value)}
+                value={evidenceUrl}
+                onChange={(e) => setEvidenceUrl(e.target.value)}
                 placeholder="https://github.com/username/repo"
                 className="bg-background border-border text-sm font-mono"
               />
               <button
                 onClick={handleSubmit}
-                disabled={submitting || !githubUrl}
+                disabled={submitting || !evidenceUrl}
                 className="tool-btn-primary h-8 w-full"
               >
                 <Send className="h-3.5 w-3.5" />
@@ -332,12 +391,37 @@ const TaskDetail = () => {
           </CodeCard>
         )}
 
+        {escrow && !escrow.released && (task.status === 'verified' || task.status === 'rejected') && (
+          <CodeCard title="Escrow" variant={releaseEligible ? 'default' : 'blue'}>
+            <div className="flex items-start gap-3">
+              {releaseEligible ? <Unlock className="h-5 w-5 text-success shrink-0 mt-0.5" /> : <Lock className="h-5 w-5 text-secondary shrink-0 mt-0.5" />}
+              <div className="flex-1 space-y-2">
+                <p className="text-sm text-foreground/85">
+                  {escrow.lockedAmount} GEN is locked, payable to {task.status === 'verified' ? 'the worker' : 'the creator (refund)'}.
+                  {releaseEligible
+                    ? ' The 24h dispute window has passed — anyone can release it now.'
+                    : releaseEligibleAt
+                      ? ` Releases automatically ${formatDistanceToNowStrict(new Date(releaseEligibleAt * 1000), { addSuffix: true })} if not disputed.`
+                      : ''}
+                </p>
+                {releaseEligible && isConnected && (
+                  <button onClick={handleRelease} disabled={releasing} className="tool-btn-primary h-8">
+                    <Unlock className="h-3.5 w-3.5" />
+                    {releasing ? 'Releasing…' : 'Release Escrow'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </CodeCard>
+        )}
+
         {canDispute && !showVerification && (
           <CodeCard title="Dispute This Result">
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
                 If you believe the AI verdict is wrong, explain why below. The task moves to "disputed" and
-                either party can then request a fresh re-verification with your reasoning as context.
+                either party can then request a fresh re-verification with your reasoning as context. Disputing
+                also blocks the escrow release until the case is resolved.
               </p>
               <Textarea
                 value={disputeReason}

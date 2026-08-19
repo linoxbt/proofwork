@@ -1,38 +1,53 @@
 import { createAppKit } from '@reown/appkit';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { defineChain } from '@reown/appkit/networks';
+import { NETWORKS } from '@/lib/networks';
 
-// GenLayer Asimov Testnet, defined for Reown AppKit (chain id 4221) —
-// mirrors genlayer-js's own testnetAsimov chain definition.
-export const genlayerAsimovTestnet = defineChain({
-  id: 4221,
-  caipNetworkId: 'eip155:4221',
+// GenLayer networks, defined for Reown AppKit — mirrors genlayer-js's own
+// chain definitions (src/lib/networks.ts) so the wallet and the RPC client
+// always agree on chain id / RPC / explorer.
+const genlayerAsimov = defineChain({
+  id: NETWORKS.asimov.chain.id,
+  caipNetworkId: `eip155:${NETWORKS.asimov.chain.id}`,
   chainNamespace: 'eip155',
-  name: 'GenLayer Asimov Testnet',
+  name: NETWORKS.asimov.label,
   nativeCurrency: { name: 'GEN Token', symbol: 'GEN', decimals: 18 },
-  rpcUrls: {
-    default: { http: ['https://rpc-asimov.genlayer.com'] },
-  },
-  blockExplorers: {
-    default: { name: 'GenLayer Explorer', url: 'https://explorer-asimov.genlayer.com' },
-  },
+  rpcUrls: { default: { http: [...NETWORKS.asimov.chain.rpcUrls.default.http] } },
+  blockExplorers: NETWORKS.asimov.chain.blockExplorers
+    ? { default: { name: 'GenLayer Explorer', url: NETWORKS.asimov.chain.blockExplorers.default.url } }
+    : undefined,
 });
+
+const genlayerStudionet = defineChain({
+  id: NETWORKS.studionet.chain.id,
+  caipNetworkId: `eip155:${NETWORKS.studionet.chain.id}`,
+  chainNamespace: 'eip155',
+  name: NETWORKS.studionet.label,
+  nativeCurrency: { name: 'GEN Token', symbol: 'GEN', decimals: 18 },
+  rpcUrls: { default: { http: [...NETWORKS.studionet.chain.rpcUrls.default.http] } },
+  blockExplorers: NETWORKS.studionet.chain.blockExplorers
+    ? { default: { name: 'GenLayer Explorer', url: NETWORKS.studionet.chain.blockExplorers.default.url } }
+    : undefined,
+});
+
+export const REOWN_NETWORKS = [genlayerAsimov, genlayerStudionet] as const;
 
 const projectId = import.meta.env.VITE_REOWN_PROJECT_ID as string | undefined;
 
 let appKit: ReturnType<typeof createAppKit> | null = null;
 
-// Reown AppKit (WalletConnect) gives mobile users — who have no injected
-// window.ethereum — a way to connect via QR code / deep link to any of the
-// 300+ WalletConnect-compatible wallets. Requires a free project ID from
+// ProofWork connects wallets exclusively through Reown AppKit (WalletConnect) —
+// its own modal handles injected wallets (via EIP-6963 auto-detection), the
+// WalletConnect QR/deep-link flow for mobile, and network switching between
+// both GenLayer networks natively. Requires a free project ID from
 // https://cloud.reown.com, set as VITE_REOWN_PROJECT_ID.
 export function getAppKit() {
   if (!projectId) return null;
   if (!appKit) {
     appKit = createAppKit({
       adapters: [new EthersAdapter()],
-      networks: [genlayerAsimovTestnet],
-      defaultNetwork: genlayerAsimovTestnet,
+      networks: [genlayerAsimov, genlayerStudionet],
+      defaultNetwork: genlayerAsimov,
       projectId,
       metadata: {
         name: 'ProofWork',

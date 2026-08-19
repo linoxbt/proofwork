@@ -9,6 +9,7 @@ import Landing from "./pages/Landing";
 import Board from "./pages/Index";
 import CreateTask from "./pages/CreateTask";
 import TaskDetail from "./pages/TaskDetail";
+import Dashboard from "./pages/Dashboard";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 
@@ -28,6 +29,7 @@ const App = () => (
               <Route path="/tasks" element={<Navigate to="/board" replace />} />
               <Route path="/create" element={<CreateTask />} />
               <Route path="/task/:address" element={<TaskDetail />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/about" element={<About />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

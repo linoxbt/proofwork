@@ -1,8 +1,7 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 # AI-Verified Task Completion — GenLayer Intelligent Contract
-# Deploy via GenLayer CLI: genlayer deploy --contract contracts/task_verifier.py
-#   --args <title> <category> <description> <criteria> <reward_amount> <deadline_unix_ts>
+# Deployed as a child of TaskFactory (see task_factory.py) — not deployed directly.
 
 from genlayer import *
 
@@ -17,10 +16,16 @@ ERROR_LLM = "[LLM_ERROR]"  # LLM misbehavior — always disagree, force rotation
 
 class TaskVerifier(gl.Contract):
     creator: str
+    factory: str
     title: str
     category: str
+    category_other: str
+    priority: str
+    estimated_effort: str
     description: str
     criteria: str
+    submission_format: str
+    submission_format_other: str
     reward_amount: u256
     deadline: u256  # unix timestamp; worker must submit before this
     worker: str
@@ -30,23 +35,37 @@ class TaskVerifier(gl.Contract):
     dispute_count: u256
     dispute_reason: str
     created_at: u256
+    verified_at: u256  # set when status first becomes verified/rejected; escrow release window starts here
 
     def __init__(
         self,
+        creator: str,
+        factory: str,
         title: str,
         category: str,
+        category_other: str,
+        priority: str,
+        estimated_effort: str,
         description: str,
         criteria: str,
+        submission_format: str,
+        submission_format_other: str,
         reward_amount: int,
         deadline: int,
     ):
         now = int(datetime.now(timezone.utc).timestamp())
         assert deadline > now, "Deadline must be in the future"
-        self.creator = str(gl.message.sender_address)
+        self.creator = creator
+        self.factory = factory
         self.title = title
         self.category = category
+        self.category_other = category_other
+        self.priority = priority
+        self.estimated_effort = estimated_effort
         self.description = description
         self.criteria = criteria
+        self.submission_format = submission_format
+        self.submission_format_other = submission_format_other
         self.reward_amount = reward_amount
         self.deadline = deadline
         self.worker = ""
@@ -56,6 +75,7 @@ class TaskVerifier(gl.Contract):
         self.dispute_count = 0
         self.dispute_reason = ""
         self.created_at = now
+        self.verified_at = 0
 
     @gl.public.write
     def claim_task(self) -> None:
@@ -68,13 +88,13 @@ class TaskVerifier(gl.Contract):
         self.status = "claimed"
 
     @gl.public.write
-    def submit_work(self, github_url: str) -> None:
+    def submit_work(self, evidence_url: str) -> None:
         caller = str(gl.message.sender_address)
         now = int(datetime.now(timezone.utc).timestamp())
         assert caller == self.worker, "Only assigned worker can submit"
         assert self.status == "claimed", "Task must be claimed first"
         assert now <= self.deadline, "Task deadline has passed"
-        self.submission_url = github_url
+        self.submission_url = evidence_url
         self.status = "submitted"
         # Evidence is now locked in. AI verification must be triggered separately
         # via request_verification() by either the creator or the worker.
@@ -94,6 +114,7 @@ class TaskVerifier(gl.Contract):
         self.dispute_count += 1
         self.dispute_reason = reason
         self.status = "disputed"
+        self.verified_at = 0
 
     @gl.public.write
     def cancel_task(self) -> None:
@@ -107,10 +128,16 @@ class TaskVerifier(gl.Contract):
     def get_task_state(self) -> dict:
         return {
             "creator": self.creator,
+            "factory": self.factory,
             "title": self.title,
             "category": self.category,
+            "category_other": self.category_other,
+            "priority": self.priority,
+            "estimated_effort": self.estimated_effort,
             "description": self.description,
             "criteria": self.criteria,
+            "submission_format": self.submission_format,
+            "submission_format_other": self.submission_format_other,
             "reward_amount": self.reward_amount,
             "deadline": self.deadline,
             "worker": self.worker,
@@ -120,6 +147,7 @@ class TaskVerifier(gl.Contract):
             "dispute_count": self.dispute_count,
             "dispute_reason": self.dispute_reason,
             "created_at": self.created_at,
+            "verified_at": self.verified_at,
         }
 
     def _verify_submission(self):
@@ -127,11 +155,12 @@ class TaskVerifier(gl.Contract):
         description = self.description
         criteria = self.criteria
         submission_url = self.submission_url
+        submission_format = self.submission_format_other or self.submission_format
         dispute_reason = self.dispute_reason
         is_redispute = self.dispute_count > 0
 
         def analyze():
-            # Fetch the GitHub repository content fresh, every time this is called
+            # Fetch the evidence fresh, every time this is called
             try:
                 web_data = gl.nondet.web.render(submission_url, mode="text")
             except Exception as e:
@@ -140,31 +169,33 @@ class TaskVerifier(gl.Contract):
             dispute_context = ""
             if is_redispute and dispute_reason:
                 dispute_context = f"""
-This submission was DISPUTED by one of the parties. Re-examine the repository
+This submission was DISPUTED by one of the parties. Re-examine the evidence
 carefully in light of the dispute reason below, and do not simply repeat a
 prior verdict — form your own independent judgment from the current evidence.
 
 DISPUTE REASON: {dispute_reason}
 """
 
-            prompt = f"""You are an AI code reviewer verifying task completion.
+            prompt = f"""You are an AI reviewer verifying task completion.
 
 TASK TITLE: {title}
 TASK DESCRIPTION: {description}
 COMPLETION CRITERIA: {criteria}
+EXPECTED EVIDENCE FORMAT: {submission_format}
 
-SUBMITTED GITHUB URL: {submission_url}
+SUBMITTED EVIDENCE URL: {submission_url}
 {dispute_context}
-REPOSITORY CONTENT:
+EVIDENCE CONTENT:
 {web_data[:8000]}
 
-Analyze the repository content against the completion criteria.
+Analyze the evidence against the completion criteria, keeping in mind the expected
+evidence format above (e.g. a GitHub repo, a live deployed app, a video, a document).
 Determine if the task has been genuinely completed.
 
 Respond in valid JSON format:
 {{"verified": true/false, "confidence": 0-100, "reasoning": "detailed explanation of your verification"}}
 
-Be strict but fair. Look for evidence that the criteria are met in the actual code."""
+Be strict but fair. Look for evidence that the criteria are met."""
 
             result = gl.nondet.exec_prompt(prompt, response_format="json")
 
@@ -186,9 +217,11 @@ Be strict but fair. Look for evidence that the criteria are met in the actual co
             principle=(
                 "`verified` must be exactly the same. `confidence` should be within "
                 "15 points of each other. `reasoning` may differ in wording but should "
-                "reference similar evidence from the repository."
+                "reference similar evidence."
             ),
         )
 
+        now = int(datetime.now(timezone.utc).timestamp())
         self.verification_result = json.dumps(parsed)
         self.status = "verified" if parsed.get("verified") else "rejected"
+        self.verified_at = now

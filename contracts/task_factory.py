@@ -1,0 +1,126 @@
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+
+# ProofWork TaskFactory — deploys TaskVerifier child contracts and holds their
+# GEN reward escrow. This is the contract deployed/hardcoded per network;
+# TaskVerifier is never deployed directly.
+#
+# TASK_VERIFIER_CODE_B64 below is generated from task_verifier.py — do not
+# hand-edit it. Run `python3 contracts/generate_factory.py` after changing
+# task_verifier.py to regenerate it.
+
+from genlayer import *
+
+from datetime import datetime, timezone
+import base64
+
+RELEASE_WINDOW_SECONDS = 86400  # 24h dispute window before escrow auto-releases
+
+TASK_VERIFIER_CODE_B64 = "IyB7ICJEZXBlbmRzIjogInB5LWdlbmxheWVyOjFqYjQ1YWE4eW5oMmE5Yzl4bjNiN3FxaDhzbTVxOTNod2ZwN2pxbXdzZmhoOGpwejA5aDYiIH0KCiMgQUktVmVyaWZpZWQgVGFzayBDb21wbGV0aW9uIOKAlCBHZW5MYXllciBJbnRlbGxpZ2VudCBDb250cmFjdAojIERlcGxveWVkIGFzIGEgY2hpbGQgb2YgVGFza0ZhY3RvcnkgKHNlZSB0YXNrX2ZhY3RvcnkucHkpIOKAlCBub3QgZGVwbG95ZWQgZGlyZWN0bHkuCgpmcm9tIGdlbmxheWVyIGltcG9ydCAqCgpmcm9tIGRhdGV0aW1lIGltcG9ydCBkYXRldGltZSwgdGltZXpvbmUKaW1wb3J0IGpzb24KCkVSUk9SX0VYUEVDVEVEID0gIltFWFBFQ1RFRF0iICAjIGJ1c2luZXNzIGxvZ2ljIOKAlCBkZXRlcm1pbmlzdGljLCBleGFjdCBtYXRjaApFUlJPUl9FWFRFUk5BTCA9ICJbRVhURVJOQUxdIiAgIyBleHRlcm5hbCBBUEkgNHh4IOKAlCBkZXRlcm1pbmlzdGljLCBleGFjdCBtYXRjaApFUlJPUl9UUkFOU0lFTlQgPSAiW1RSQU5TSUVOVF0iICAjIG5ldHdvcmsvNXh4IOKAlCBub24tZGV0ZXJtaW5pc3RpYywgYWdyZWUgaWYgYm90aCB0cmFuc2llbnQKRVJST1JfTExNID0gIltMTE1fRVJST1JdIiAgIyBMTE0gbWlzYmVoYXZpb3Ig4oCUIGFsd2F5cyBkaXNhZ3JlZSwgZm9yY2Ugcm90YXRpb24KCgpjbGFzcyBUYXNrVmVyaWZpZXIoZ2wuQ29udHJhY3QpOgogICAgY3JlYXRvcjogc3RyCiAgICBmYWN0b3J5OiBzdHIKICAgIHRpdGxlOiBzdHIKICAgIGNhdGVnb3J5OiBzdHIKICAgIGNhdGVnb3J5X290aGVyOiBzdHIKICAgIHByaW9yaXR5OiBzdHIKICAgIGVzdGltYXRlZF9lZmZvcnQ6IHN0cgogICAgZGVzY3JpcHRpb246IHN0cgogICAgY3JpdGVyaWE6IHN0cgogICAgc3VibWlzc2lvbl9mb3JtYXQ6IHN0cgogICAgc3VibWlzc2lvbl9mb3JtYXRfb3RoZXI6IHN0cgogICAgcmV3YXJkX2Ftb3VudDogdTI1NgogICAgZGVhZGxpbmU6IHUyNTYgICMgdW5peCB0aW1lc3RhbXA7IHdvcmtlciBtdXN0IHN1Ym1pdCBiZWZvcmUgdGhpcwogICAgd29ya2VyOiBzdHIKICAgIHN1Ym1pc3Npb25fdXJsOiBzdHIKICAgIHN0YXR1czogc3RyICAjICJvcGVuIiwgImNsYWltZWQiLCAic3VibWl0dGVkIiwgInZlcmlmaWVkIiwgInJlamVjdGVkIiwgImRpc3B1dGVkIgogICAgdmVyaWZpY2F0aW9uX3Jlc3VsdDogc3RyCiAgICBkaXNwdXRlX2NvdW50OiB1MjU2CiAgICBkaXNwdXRlX3JlYXNvbjogc3RyCiAgICBjcmVhdGVkX2F0OiB1MjU2CiAgICB2ZXJpZmllZF9hdDogdTI1NiAgIyBzZXQgd2hlbiBzdGF0dXMgZmlyc3QgYmVjb21lcyB2ZXJpZmllZC9yZWplY3RlZDsgZXNjcm93IHJlbGVhc2Ugd2luZG93IHN0YXJ0cyBoZXJlCgogICAgZGVmIF9faW5pdF9fKAogICAgICAgIHNlbGYsCiAgICAgICAgY3JlYXRvcjogc3RyLAogICAgICAgIGZhY3Rvcnk6IHN0ciwKICAgICAgICB0aXRsZTogc3RyLAogICAgICAgIGNhdGVnb3J5OiBzdHIsCiAgICAgICAgY2F0ZWdvcnlfb3RoZXI6IHN0ciwKICAgICAgICBwcmlvcml0eTogc3RyLAogICAgICAgIGVzdGltYXRlZF9lZmZvcnQ6IHN0ciwKICAgICAgICBkZXNjcmlwdGlvbjogc3RyLAogICAgICAgIGNyaXRlcmlhOiBzdHIsCiAgICAgICAgc3VibWlzc2lvbl9mb3JtYXQ6IHN0ciwKICAgICAgICBzdWJtaXNzaW9uX2Zvcm1hdF9vdGhlcjogc3RyLAogICAgICAgIHJld2FyZF9hbW91bnQ6IGludCwKICAgICAgICBkZWFkbGluZTogaW50LAogICAgKToKICAgICAgICBub3cgPSBpbnQoZGF0ZXRpbWUubm93KHRpbWV6b25lLnV0YykudGltZXN0YW1wKCkpCiAgICAgICAgYXNzZXJ0IGRlYWRsaW5lID4gbm93LCAiRGVhZGxpbmUgbXVzdCBiZSBpbiB0aGUgZnV0dXJlIgogICAgICAgIHNlbGYuY3JlYXRvciA9IGNyZWF0b3IKICAgICAgICBzZWxmLmZhY3RvcnkgPSBmYWN0b3J5CiAgICAgICAgc2VsZi50aXRsZSA9IHRpdGxlCiAgICAgICAgc2VsZi5jYXRlZ29yeSA9IGNhdGVnb3J5CiAgICAgICAgc2VsZi5jYXRlZ29yeV9vdGhlciA9IGNhdGVnb3J5X290aGVyCiAgICAgICAgc2VsZi5wcmlvcml0eSA9IHByaW9yaXR5CiAgICAgICAgc2VsZi5lc3RpbWF0ZWRfZWZmb3J0ID0gZXN0aW1hdGVkX2VmZm9ydAogICAgICAgIHNlbGYuZGVzY3JpcHRpb24gPSBkZXNjcmlwdGlvbgogICAgICAgIHNlbGYuY3JpdGVyaWEgPSBjcml0ZXJpYQogICAgICAgIHNlbGYuc3VibWlzc2lvbl9mb3JtYXQgPSBzdWJtaXNzaW9uX2Zvcm1hdAogICAgICAgIHNlbGYuc3VibWlzc2lvbl9mb3JtYXRfb3RoZXIgPSBzdWJtaXNzaW9uX2Zvcm1hdF9vdGhlcgogICAgICAgIHNlbGYucmV3YXJkX2Ftb3VudCA9IHJld2FyZF9hbW91bnQKICAgICAgICBzZWxmLmRlYWRsaW5lID0gZGVhZGxpbmUKICAgICAgICBzZWxmLndvcmtlciA9ICIiCiAgICAgICAgc2VsZi5zdWJtaXNzaW9uX3VybCA9ICIiCiAgICAgICAgc2VsZi5zdGF0dXMgPSAib3BlbiIKICAgICAgICBzZWxmLnZlcmlmaWNhdGlvbl9yZXN1bHQgPSAiIgogICAgICAgIHNlbGYuZGlzcHV0ZV9jb3VudCA9IDAKICAgICAgICBzZWxmLmRpc3B1dGVfcmVhc29uID0gIiIKICAgICAgICBzZWxmLmNyZWF0ZWRfYXQgPSBub3cKICAgICAgICBzZWxmLnZlcmlmaWVkX2F0ID0gMAoKICAgIEBnbC5wdWJsaWMud3JpdGUKICAgIGRlZiBjbGFpbV90YXNrKHNlbGYpIC0+IE5vbmU6CiAgICAgICAgY2FsbGVyID0gc3RyKGdsLm1lc3NhZ2Uuc2VuZGVyX2FkZHJlc3MpCiAgICAgICAgbm93ID0gaW50KGRhdGV0aW1lLm5vdyh0aW1lem9uZS51dGMpLnRpbWVzdGFtcCgpKQogICAgICAgIGFzc2VydCBzZWxmLnN0YXR1cyA9PSAib3BlbiIsICJUYXNrIGlzIG5vdCBvcGVuIgogICAgICAgIGFzc2VydCBjYWxsZXIgIT0gc2VsZi5jcmVhdG9yLCAiQ3JlYXRvciBjYW5ub3QgY2xhaW0gb3duIHRhc2siCiAgICAgICAgYXNzZXJ0IG5vdyA8PSBzZWxmLmRlYWRsaW5lLCAiVGFzayBkZWFkbGluZSBoYXMgcGFzc2VkIgogICAgICAgIHNlbGYud29ya2VyID0gY2FsbGVyCiAgICAgICAgc2VsZi5zdGF0dXMgPSAiY2xhaW1lZCIKCiAgICBAZ2wucHVibGljLndyaXRlCiAgICBkZWYgc3VibWl0X3dvcmsoc2VsZiwgZXZpZGVuY2VfdXJsOiBzdHIpIC0+IE5vbmU6CiAgICAgICAgY2FsbGVyID0gc3RyKGdsLm1lc3NhZ2Uuc2VuZGVyX2FkZHJlc3MpCiAgICAgICAgbm93ID0gaW50KGRhdGV0aW1lLm5vdyh0aW1lem9uZS51dGMpLnRpbWVzdGFtcCgpKQogICAgICAgIGFzc2VydCBjYWxsZXIgPT0gc2VsZi53b3JrZXIsICJPbmx5IGFzc2lnbmVkIHdvcmtlciBjYW4gc3VibWl0IgogICAgICAgIGFzc2VydCBzZWxmLnN0YXR1cyA9PSAiY2xhaW1lZCIsICJUYXNrIG11c3QgYmUgY2xhaW1lZCBmaXJzdCIKICAgICAgICBhc3NlcnQgbm93IDw9IHNlbGYuZGVhZGxpbmUsICJUYXNrIGRlYWRsaW5lIGhhcyBwYXNzZWQiCiAgICAgICAgc2VsZi5zdWJtaXNzaW9uX3VybCA9IGV2aWRlbmNlX3VybAogICAgICAgIHNlbGYuc3RhdHVzID0gInN1Ym1pdHRlZCIKICAgICAgICAjIEV2aWRlbmNlIGlzIG5vdyBsb2NrZWQgaW4uIEFJIHZlcmlmaWNhdGlvbiBtdXN0IGJlIHRyaWdnZXJlZCBzZXBhcmF0ZWx5CiAgICAgICAgIyB2aWEgcmVxdWVzdF92ZXJpZmljYXRpb24oKSBieSBlaXRoZXIgdGhlIGNyZWF0b3Igb3IgdGhlIHdvcmtlci4KCiAgICBAZ2wucHVibGljLndyaXRlCiAgICBkZWYgcmVxdWVzdF92ZXJpZmljYXRpb24oc2VsZikgLT4gTm9uZToKICAgICAgICBjYWxsZXIgPSBzdHIoZ2wubWVzc2FnZS5zZW5kZXJfYWRkcmVzcykKICAgICAgICBhc3NlcnQgY2FsbGVyIGluIChzZWxmLmNyZWF0b3IsIHNlbGYud29ya2VyKSwgIk9ubHkgY3JlYXRvciBvciB3b3JrZXIgY2FuIHJlcXVlc3QgdmVyaWZpY2F0aW9uIgogICAgICAgIGFzc2VydCBzZWxmLnN0YXR1cyBpbiAoInN1Ym1pdHRlZCIsICJkaXNwdXRlZCIpLCAiVGFzayBtdXN0IGJlIHN1Ym1pdHRlZCBvciBkaXNwdXRlZCB0byB2ZXJpZnkiCiAgICAgICAgc2VsZi5fdmVyaWZ5X3N1Ym1pc3Npb24oKQoKICAgIEBnbC5wdWJsaWMud3JpdGUKICAgIGRlZiBkaXNwdXRlKHNlbGYsIHJlYXNvbjogc3RyKSAtPiBOb25lOgogICAgICAgIGNhbGxlciA9IHN0cihnbC5tZXNzYWdlLnNlbmRlcl9hZGRyZXNzKQogICAgICAgIGFzc2VydCBjYWxsZXIgaW4gKHNlbGYuY3JlYXRvciwgc2VsZi53b3JrZXIpLCAiT25seSBjcmVhdG9yIG9yIHdvcmtlciBjYW4gZGlzcHV0ZSIKICAgICAgICBhc3NlcnQgc2VsZi5zdGF0dXMgaW4gKCJ2ZXJpZmllZCIsICJyZWplY3RlZCIpLCAiQ2FuIG9ubHkgZGlzcHV0ZSBhIGRlY2lkZWQgdmVyaWZpY2F0aW9uIgogICAgICAgIHNlbGYuZGlzcHV0ZV9jb3VudCArPSAxCiAgICAgICAgc2VsZi5kaXNwdXRlX3JlYXNvbiA9IHJlYXNvbgogICAgICAgIHNlbGYuc3RhdHVzID0gImRpc3B1dGVkIgogICAgICAgIHNlbGYudmVyaWZpZWRfYXQgPSAwCgogICAgQGdsLnB1YmxpYy53cml0ZQogICAgZGVmIGNhbmNlbF90YXNrKHNlbGYpIC0+IE5vbmU6CiAgICAgICAgY2FsbGVyID0gc3RyKGdsLm1lc3NhZ2Uuc2VuZGVyX2FkZHJlc3MpCiAgICAgICAgYXNzZXJ0IGNhbGxlciA9PSBzZWxmLmNyZWF0b3IsICJPbmx5IGNyZWF0b3IgY2FuIGNhbmNlbCIKICAgICAgICBhc3NlcnQgc2VsZi5zdGF0dXMgaW4gKCJvcGVuIiwgImNsYWltZWQiKSwgIkNhbm5vdCBjYW5jZWwgYWZ0ZXIgc3VibWlzc2lvbiIKICAgICAgICBzZWxmLnN0YXR1cyA9ICJvcGVuIgogICAgICAgIHNlbGYud29ya2VyID0gIiIKCiAgICBAZ2wucHVibGljLnZpZXcKICAgIGRlZiBnZXRfdGFza19zdGF0ZShzZWxmKSAtPiBkaWN0OgogICAgICAgIHJldHVybiB7CiAgICAgICAgICAgICJjcmVhdG9yIjogc2VsZi5jcmVhdG9yLAogICAgICAgICAgICAiZmFjdG9yeSI6IHNlbGYuZmFjdG9yeSwKICAgICAgICAgICAgInRpdGxlIjogc2VsZi50aXRsZSwKICAgICAgICAgICAgImNhdGVnb3J5Ijogc2VsZi5jYXRlZ29yeSwKICAgICAgICAgICAgImNhdGVnb3J5X290aGVyIjogc2VsZi5jYXRlZ29yeV9vdGhlciwKICAgICAgICAgICAgInByaW9yaXR5Ijogc2VsZi5wcmlvcml0eSwKICAgICAgICAgICAgImVzdGltYXRlZF9lZmZvcnQiOiBzZWxmLmVzdGltYXRlZF9lZmZvcnQsCiAgICAgICAgICAgICJkZXNjcmlwdGlvbiI6IHNlbGYuZGVzY3JpcHRpb24sCiAgICAgICAgICAgICJjcml0ZXJpYSI6IHNlbGYuY3JpdGVyaWEsCiAgICAgICAgICAgICJzdWJtaXNzaW9uX2Zvcm1hdCI6IHNlbGYuc3VibWlzc2lvbl9mb3JtYXQsCiAgICAgICAgICAgICJzdWJtaXNzaW9uX2Zvcm1hdF9vdGhlciI6IHNlbGYuc3VibWlzc2lvbl9mb3JtYXRfb3RoZXIsCiAgICAgICAgICAgICJyZXdhcmRfYW1vdW50Ijogc2VsZi5yZXdhcmRfYW1vdW50LAogICAgICAgICAgICAiZGVhZGxpbmUiOiBzZWxmLmRlYWRsaW5lLAogICAgICAgICAgICAid29ya2VyIjogc2VsZi53b3JrZXIsCiAgICAgICAgICAgICJzdWJtaXNzaW9uX3VybCI6IHNlbGYuc3VibWlzc2lvbl91cmwsCiAgICAgICAgICAgICJzdGF0dXMiOiBzZWxmLnN0YXR1cywKICAgICAgICAgICAgInZlcmlmaWNhdGlvbl9yZXN1bHQiOiBzZWxmLnZlcmlmaWNhdGlvbl9yZXN1bHQsCiAgICAgICAgICAgICJkaXNwdXRlX2NvdW50Ijogc2VsZi5kaXNwdXRlX2NvdW50LAogICAgICAgICAgICAiZGlzcHV0ZV9yZWFzb24iOiBzZWxmLmRpc3B1dGVfcmVhc29uLAogICAgICAgICAgICAiY3JlYXRlZF9hdCI6IHNlbGYuY3JlYXRlZF9hdCwKICAgICAgICAgICAgInZlcmlmaWVkX2F0Ijogc2VsZi52ZXJpZmllZF9hdCwKICAgICAgICB9CgogICAgZGVmIF92ZXJpZnlfc3VibWlzc2lvbihzZWxmKToKICAgICAgICB0aXRsZSA9IHNlbGYudGl0bGUKICAgICAgICBkZXNjcmlwdGlvbiA9IHNlbGYuZGVzY3JpcHRpb24KICAgICAgICBjcml0ZXJpYSA9IHNlbGYuY3JpdGVyaWEKICAgICAgICBzdWJtaXNzaW9uX3VybCA9IHNlbGYuc3VibWlzc2lvbl91cmwKICAgICAgICBzdWJtaXNzaW9uX2Zvcm1hdCA9IHNlbGYuc3VibWlzc2lvbl9mb3JtYXRfb3RoZXIgb3Igc2VsZi5zdWJtaXNzaW9uX2Zvcm1hdAogICAgICAgIGRpc3B1dGVfcmVhc29uID0gc2VsZi5kaXNwdXRlX3JlYXNvbgogICAgICAgIGlzX3JlZGlzcHV0ZSA9IHNlbGYuZGlzcHV0ZV9jb3VudCA+IDAKCiAgICAgICAgZGVmIGFuYWx5emUoKToKICAgICAgICAgICAgIyBGZXRjaCB0aGUgZXZpZGVuY2UgZnJlc2gsIGV2ZXJ5IHRpbWUgdGhpcyBpcyBjYWxsZWQKICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgd2ViX2RhdGEgPSBnbC5ub25kZXQud2ViLnJlbmRlcihzdWJtaXNzaW9uX3VybCwgbW9kZT0idGV4dCIpCiAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICAgICAgICAgIHJhaXNlIGdsLnZtLlVzZXJFcnJvcihmIntFUlJPUl9UUkFOU0lFTlR9IGZhaWxlZCB0byBmZXRjaCB7c3VibWlzc2lvbl91cmx9OiB7ZX0iKQoKICAgICAgICAgICAgZGlzcHV0ZV9jb250ZXh0ID0gIiIKICAgICAgICAgICAgaWYgaXNfcmVkaXNwdXRlIGFuZCBkaXNwdXRlX3JlYXNvbjoKICAgICAgICAgICAgICAgIGRpc3B1dGVfY29udGV4dCA9IGYiIiIKVGhpcyBzdWJtaXNzaW9uIHdhcyBESVNQVVRFRCBieSBvbmUgb2YgdGhlIHBhcnRpZXMuIFJlLWV4YW1pbmUgdGhlIGV2aWRlbmNlCmNhcmVmdWxseSBpbiBsaWdodCBvZiB0aGUgZGlzcHV0ZSByZWFzb24gYmVsb3csIGFuZCBkbyBub3Qgc2ltcGx5IHJlcGVhdCBhCnByaW9yIHZlcmRpY3Qg4oCUIGZvcm0geW91ciBvd24gaW5kZXBlbmRlbnQganVkZ21lbnQgZnJvbSB0aGUgY3VycmVudCBldmlkZW5jZS4KCkRJU1BVVEUgUkVBU09OOiB7ZGlzcHV0ZV9yZWFzb259CiIiIgoKICAgICAgICAgICAgcHJvbXB0ID0gZiIiIllvdSBhcmUgYW4gQUkgcmV2aWV3ZXIgdmVyaWZ5aW5nIHRhc2sgY29tcGxldGlvbi4KClRBU0sgVElUTEU6IHt0aXRsZX0KVEFTSyBERVNDUklQVElPTjoge2Rlc2NyaXB0aW9ufQpDT01QTEVUSU9OIENSSVRFUklBOiB7Y3JpdGVyaWF9CkVYUEVDVEVEIEVWSURFTkNFIEZPUk1BVDoge3N1Ym1pc3Npb25fZm9ybWF0fQoKU1VCTUlUVEVEIEVWSURFTkNFIFVSTDoge3N1Ym1pc3Npb25fdXJsfQp7ZGlzcHV0ZV9jb250ZXh0fQpFVklERU5DRSBDT05URU5UOgp7d2ViX2RhdGFbOjgwMDBdfQoKQW5hbHl6ZSB0aGUgZXZpZGVuY2UgYWdhaW5zdCB0aGUgY29tcGxldGlvbiBjcml0ZXJpYSwga2VlcGluZyBpbiBtaW5kIHRoZSBleHBlY3RlZApldmlkZW5jZSBmb3JtYXQgYWJvdmUgKGUuZy4gYSBHaXRIdWIgcmVwbywgYSBsaXZlIGRlcGxveWVkIGFwcCwgYSB2aWRlbywgYSBkb2N1bWVudCkuCkRldGVybWluZSBpZiB0aGUgdGFzayBoYXMgYmVlbiBnZW51aW5lbHkgY29tcGxldGVkLgoKUmVzcG9uZCBpbiB2YWxpZCBKU09OIGZvcm1hdDoKe3sidmVyaWZpZWQiOiB0cnVlL2ZhbHNlLCAiY29uZmlkZW5jZSI6IDAtMTAwLCAicmVhc29uaW5nIjogImRldGFpbGVkIGV4cGxhbmF0aW9uIG9mIHlvdXIgdmVyaWZpY2F0aW9uIn19CgpCZSBzdHJpY3QgYnV0IGZhaXIuIExvb2sgZm9yIGV2aWRlbmNlIHRoYXQgdGhlIGNyaXRlcmlhIGFyZSBtZXQuIiIiCgogICAgICAgICAgICByZXN1bHQgPSBnbC5ub25kZXQuZXhlY19wcm9tcHQocHJvbXB0LCByZXNwb25zZV9mb3JtYXQ9Impzb24iKQoKICAgICAgICAgICAgaWYgbm90IGlzaW5zdGFuY2UocmVzdWx0LCBkaWN0KSBvciAidmVyaWZpZWQiIG5vdCBpbiByZXN1bHQ6CiAgICAgICAgICAgICAgICByZXR1cm4gewogICAgICAgICAgICAgICAgICAgICJ2ZXJpZmllZCI6IEZhbHNlLAogICAgICAgICAgICAgICAgICAgICJjb25maWRlbmNlIjogMCwKICAgICAgICAgICAgICAgICAgICAicmVhc29uaW5nIjogIkFJIHZlcmlmaWNhdGlvbiBwcm9kdWNlZCBtYWxmb3JtZWQgb3V0cHV0LiBNYW51YWwgcmV2aWV3IG5lZWRlZC4iLAogICAgICAgICAgICAgICAgfQoKICAgICAgICAgICAgcmV0dXJuIHsKICAgICAgICAgICAgICAgICJ2ZXJpZmllZCI6IGJvb2wocmVzdWx0LmdldCgidmVyaWZpZWQiLCBGYWxzZSkpLAogICAgICAgICAgICAgICAgImNvbmZpZGVuY2UiOiBpbnQocmVzdWx0LmdldCgiY29uZmlkZW5jZSIsIDApIG9yIDApLAogICAgICAgICAgICAgICAgInJlYXNvbmluZyI6IHN0cihyZXN1bHQuZ2V0KCJyZWFzb25pbmciLCAiIikpLAogICAgICAgICAgICB9CgogICAgICAgIHBhcnNlZCA9IGdsLmVxX3ByaW5jaXBsZS5wcm9tcHRfY29tcGFyYXRpdmUoCiAgICAgICAgICAgIGFuYWx5emUsCiAgICAgICAgICAgIHByaW5jaXBsZT0oCiAgICAgICAgICAgICAgICAiYHZlcmlmaWVkYCBtdXN0IGJlIGV4YWN0bHkgdGhlIHNhbWUuIGBjb25maWRlbmNlYCBzaG91bGQgYmUgd2l0aGluICIKICAgICAgICAgICAgICAgICIxNSBwb2ludHMgb2YgZWFjaCBvdGhlci4gYHJlYXNvbmluZ2AgbWF5IGRpZmZlciBpbiB3b3JkaW5nIGJ1dCBzaG91bGQgIgogICAgICAgICAgICAgICAgInJlZmVyZW5jZSBzaW1pbGFyIGV2aWRlbmNlLiIKICAgICAgICAgICAgKSwKICAgICAgICApCgogICAgICAgIG5vdyA9IGludChkYXRldGltZS5ub3codGltZXpvbmUudXRjKS50aW1lc3RhbXAoKSkKICAgICAgICBzZWxmLnZlcmlmaWNhdGlvbl9yZXN1bHQgPSBqc29uLmR1bXBzKHBhcnNlZCkKICAgICAgICBzZWxmLnN0YXR1cyA9ICJ2ZXJpZmllZCIgaWYgcGFyc2VkLmdldCgidmVyaWZpZWQiKSBlbHNlICJyZWplY3RlZCIKICAgICAgICBzZWxmLnZlcmlmaWVkX2F0ID0gbm93Cg=="
+
+
+@gl.evm.contract_interface
+class _Recipient:
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
+class TaskFactory(gl.Contract):
+    tasks: DynArray[Address]
+    escrow: TreeMap[Address, u256]
+    escrow_released: TreeMap[Address, bool]
+    task_count: u256
+
+    def __init__(self):
+        self.task_count = 0
+
+    @gl.public.write.payable
+    def create_task(
+        self,
+        title: str,
+        category: str,
+        category_other: str,
+        priority: str,
+        estimated_effort: str,
+        description: str,
+        criteria: str,
+        submission_format: str,
+        submission_format_other: str,
+        reward_amount: int,
+        deadline: int,
+    ) -> str:
+        expected_value = u256(reward_amount) * u256(10**18)
+        assert gl.message.value == expected_value, "Sent value must equal reward_amount GEN (in atto-GEN)"
+
+        creator = str(gl.message.sender_address)
+        factory_address = str(gl.message.contract_address)
+        verifier_code = base64.b64decode(TASK_VERIFIER_CODE_B64)
+
+        addr = gl.deploy_contract(
+            code=verifier_code,
+            args=[
+                creator,
+                factory_address,
+                title,
+                category,
+                category_other,
+                priority,
+                estimated_effort,
+                description,
+                criteria,
+                submission_format,
+                submission_format_other,
+                reward_amount,
+                deadline,
+            ],
+            salt_nonce=int(self.task_count) + 1,
+            on="accepted",
+        )
+
+        self.tasks.append(addr)
+        self.escrow[addr] = gl.message.value
+        self.escrow_released[addr] = False
+        self.task_count += 1
+        return str(addr)
+
+    @gl.public.write
+    def release_funds(self, task_address: str) -> None:
+        addr = Address(task_address)
+        assert addr in self.escrow, "Unknown task"
+        assert not self.escrow_released.get(addr, False), "Escrow already released"
+
+        other = gl.get_contract_at(addr)
+        state = other.view().get_task_state()
+
+        status = state["status"]
+        assert status in ("verified", "rejected"), "Task has not been decided yet"
+
+        verified_at = int(state["verified_at"])
+        assert verified_at > 0, "No verification timestamp recorded"
+
+        now = int(datetime.now(timezone.utc).timestamp())
+        assert now >= verified_at + RELEASE_WINDOW_SECONDS, "24h dispute window still open"
+
+        amount = self.escrow[addr]
+        recipient = state["worker"] if status == "verified" else state["creator"]
+
+        self.escrow_released[addr] = True
+        _Recipient(Address(recipient)).emit_transfer(value=amount)
+
+    @gl.public.view
+    def get_all_tasks(self) -> list[str]:
+        return [str(a) for a in self.tasks]
+
+    @gl.public.view
+    def get_task_count(self) -> int:
+        return int(self.task_count)
+
+    @gl.public.view
+    def get_escrow_status(self, task_address: str) -> dict:
+        addr = Address(task_address)
+        return {
+            "locked_amount": self.escrow.get(addr, u256(0)),
+            "released": self.escrow_released.get(addr, False),
+        }

@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { createClient } from 'genlayer-js';
-import { testnetAsimov } from 'genlayer-js/chains';
-import { WalletPickerModal } from '@/components/WalletPickerModal';
-import { getAppKit, isReownConfigured } from '@/lib/reown';
+import { getAppKit, isReownConfigured, REOWN_NETWORKS } from '@/lib/reown';
+import { NETWORKS, type NetworkId, getStoredNetwork, setStoredNetwork } from '@/lib/networks';
 
 interface WalletContextType {
   address: string;
@@ -10,10 +9,11 @@ interface WalletContextType {
   client: any;
   isConnected: boolean;
   isConnecting: boolean;
-  connect: () => Promise<void>;
+  connect: () => void;
   disconnect: () => void;
-  account: any;
-  providerName: string;
+  network: NetworkId;
+  switchNetwork: (network: NetworkId) => void;
+  reownReady: boolean;
 }
 
 const WalletContext = createContext<WalletContextType | null>(null);
@@ -23,155 +23,102 @@ function truncateAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-export const REOWN_PROVIDER_ID = 'reown';
-
-interface DetectedProvider {
-  name: string;
-  provider: any;
-}
-
-function detectProviders(): DetectedProvider[] {
-  if (typeof window === 'undefined') return [];
-  const ethereum = (window as any).ethereum;
-  if (!ethereum) return [];
-
-  const identify = (p: any): string =>
-    p.isMetaMask ? 'MetaMask'
-    : p.isCoinbaseWallet ? 'Coinbase Wallet'
-    : p.isBraveWallet ? 'Brave Wallet'
-    : p.isTrust ? 'Trust Wallet'
-    : p.isRabby ? 'Rabby'
-    : p.isPhantom ? 'Phantom'
-    : 'Browser Wallet';
-
-  if (ethereum.providers && Array.isArray(ethereum.providers)) {
-    return ethereum.providers.map((p: any) => ({ name: identify(p), provider: p }));
-  }
-
-  return [{ name: identify(ethereum), provider: ethereum }];
+function chainIdToNetwork(chainId: number | string | undefined): NetworkId {
+  const idNum = Number(chainId);
+  if (idNum === NETWORKS.studionet.chain.id) return 'studionet';
+  return 'asimov';
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState('');
   const [client, setClient] = useState<any>(null);
+  const [network, setNetwork] = useState<NetworkId>(getStoredNetwork());
   const [isConnecting, setIsConnecting] = useState(false);
-  const [providerName, setProviderName] = useState('');
-  const [activeProvider, setActiveProvider] = useState<any>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pendingProviders, setPendingProviders] = useState<DetectedProvider[]>([]);
+  const reownReady = isReownConfigured();
 
-  const buildClient = useCallback((addr: string, provider: any) => {
-    // provider is required so writes are signed through the connected browser wallet
-    const c = createClient({ chain: testnetAsimov, account: addr as `0x${string}`, provider });
-    // Switches (or prompts to add) the wallet's active chain to GenLayer Asimov Testnet.
-    // Required before writeContract/deployContract will work through a browser wallet.
-    c.connect('testnetAsimov').catch((err: any) =>
-      console.error('Failed to switch wallet to GenLayer Asimov Testnet:', err)
-    );
-    return c;
-  }, []);
-
+  // Sync address + active network from the Reown AppKit modal — the single
+  // source of truth for the connection. Its own UI handles injected-wallet
+  // detection (EIP-6963), WalletConnect QR/deep-link, and network switching.
   useEffect(() => {
-    const provider = activeProvider || (typeof window !== 'undefined' ? (window as any).ethereum : null);
-    if (!provider) return;
+    const modal = getAppKit();
+    if (!modal) return;
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      if (accounts.length === 0) {
-        setAddress(''); setClient(null); setProviderName('');
-      } else {
-        setAddress(accounts[0]); setClient(buildClient(accounts[0], provider));
+    if (modal.getIsConnectedState()) {
+      const addr = modal.getAddress();
+      if (addr) setAddress(addr);
+      const caipNetwork = modal.getCaipNetwork();
+      if (caipNetwork) {
+        const net = chainIdToNetwork(caipNetwork.id);
+        setNetwork(net);
+        setStoredNetwork(net);
       }
-    };
-    const handleChainChanged = () => window.location.reload();
+    }
 
-    provider.on?.('accountsChanged', handleAccountsChanged);
-    provider.on?.('chainChanged', handleChainChanged);
-    provider.request?.({ method: 'eth_accounts' }).then((accounts: string[]) => {
-      if (accounts.length > 0) { setAddress(accounts[0]); setClient(buildClient(accounts[0], provider)); }
-    }).catch(() => {});
+    const unsubAccount = modal.subscribeAccount((acc: any) => {
+      if (acc.isConnected && acc.address) {
+        setAddress(acc.address);
+      } else {
+        setAddress('');
+        setClient(null);
+      }
+    });
+
+    const unsubNetwork = modal.subscribeNetwork((netState: any) => {
+      if (netState.chainId === undefined) return;
+      const net = chainIdToNetwork(netState.chainId);
+      setNetwork(net);
+      setStoredNetwork(net);
+    });
 
     return () => {
-      provider.removeListener?.('accountsChanged', handleAccountsChanged);
-      provider.removeListener?.('chainChanged', handleChainChanged);
+      unsubAccount();
+      unsubNetwork();
     };
-  }, [buildClient, activeProvider]);
+  }, []);
 
-  const connectWithProvider = useCallback(async (detected: DetectedProvider) => {
-    setIsConnecting(true);
-    try {
-      const accounts: string[] = await detected.provider.request({ method: 'eth_requestAccounts' });
-      if (accounts.length > 0) {
-        setAddress(accounts[0]);
-        setClient(buildClient(accounts[0], detected.provider));
-        setActiveProvider(detected.provider);
-        setProviderName(detected.name);
-      }
-    } catch (err) {
-      console.error('Wallet connection failed:', err);
-    } finally {
-      setIsConnecting(false);
+  // Rebuild the genlayer-js client whenever the connected address or active
+  // network changes, using the actual Reown-provided EIP-1193 provider so
+  // writes are signed through the connected wallet.
+  useEffect(() => {
+    const modal = getAppKit();
+    if (!modal || !address) {
+      setClient(null);
+      return;
     }
-  }, [buildClient]);
+    const provider = modal.getWalletProvider();
+    if (!provider) {
+      setClient(null);
+      return;
+    }
+    setClient(createClient({ chain: NETWORKS[network].chain, account: address as `0x${string}`, provider }));
+  }, [address, network]);
 
-  // WalletConnect/Reown: opens a QR-code / deep-link modal so wallets without an
-  // injected provider (most notably mobile browsers) can still connect.
-  const connectWithReown = useCallback(async () => {
+  const connect = useCallback(() => {
     const modal = getAppKit();
     if (!modal) {
-      console.error('Reown AppKit is not configured — set VITE_REOWN_PROJECT_ID.');
+      console.error('Reown AppKit is not configured — set VITE_REOWN_PROJECT_ID to enable wallet connect.');
       return;
     }
     setIsConnecting(true);
-    try {
-      setPickerOpen(false);
-      await modal.open();
-
-      const connectedAddress = await new Promise<string | null>((resolve) => {
-        let settled = false;
-        const settle = (value: string | null) => {
-          if (settled) return;
-          settled = true;
-          unsubAccount();
-          unsubState();
-          resolve(value);
-        };
-        const unsubAccount = modal.subscribeAccount((acc) => {
-          if (acc.isConnected && acc.address) settle(acc.address);
-        });
-        const unsubState = modal.subscribeState((state) => {
-          // Modal closed without completing a connection
-          if (!state.open && !modal.getIsConnectedState()) {
-            setTimeout(() => settle(null), 300);
-          }
-        });
-      });
-
-      if (!connectedAddress) return;
-
-      const provider = modal.getWalletProvider();
-      setAddress(connectedAddress);
-      setClient(buildClient(connectedAddress, provider));
-      setActiveProvider(provider);
-      setProviderName('WalletConnect');
-    } catch (err) {
-      console.error('Reown wallet connection failed:', err);
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [buildClient]);
-
-  const connect = useCallback(async () => {
-    const detected = detectProviders();
-    setPendingProviders(detected);
-    setPickerOpen(true);
+    modal.open().finally(() => setIsConnecting(false));
   }, []);
 
   const disconnect = useCallback(() => {
-    setAddress(''); setClient(null); setProviderName(''); setActiveProvider(null);
-    if (providerName === 'WalletConnect') {
-      getAppKit()?.disconnect().catch(() => {});
+    getAppKit()?.disconnect().catch(() => {});
+    setAddress('');
+    setClient(null);
+  }, []);
+
+  const switchNetwork = useCallback((target: NetworkId) => {
+    const modal = getAppKit();
+    if (!modal) {
+      setNetwork(target);
+      setStoredNetwork(target);
+      return;
     }
-  }, [providerName]);
+    const appKitNetwork = target === 'studionet' ? REOWN_NETWORKS[1] : REOWN_NETWORKS[0];
+    modal.switchNetwork(appKitNetwork).catch((err: any) => console.error('Network switch failed:', err));
+  }, []);
 
   return (
     <WalletContext.Provider
@@ -183,19 +130,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         isConnecting,
         connect,
         disconnect,
-        account: address,
-        providerName,
+        network,
+        switchNetwork,
+        reownReady,
       }}
     >
       {children}
-      <WalletPickerModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        providers={pendingProviders}
-        onSelect={(p) => connectWithProvider(p)}
-        showReown={isReownConfigured()}
-        onSelectReown={connectWithReown}
-      />
     </WalletContext.Provider>
   );
 }

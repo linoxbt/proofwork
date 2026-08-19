@@ -198,8 +198,30 @@
     50% { opacity: 1; transform: scale(1.12); }
   }
 
+  /* Marquee ticker */
+  .marquee-track {
+    display: flex;
+    width: max-content;
+    animation: marquee 26s linear infinite;
+  }
+
+  .marquee-track:hover {
+    animation-play-state: paused;
+  }
+
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* Bento tiles */
+  .bento-tile {
+    @apply rounded-lg border border-border bg-card p-5 relative overflow-hidden
+           hover:border-primary/30 transition-colors;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .hero-glow, .animated-glow, .node-pulse {
+    .hero-glow, .animated-glow, .node-pulse, .marquee-track {
       animation: none;
     }
   }
