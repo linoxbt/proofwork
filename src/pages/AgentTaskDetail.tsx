@@ -287,6 +287,9 @@ const AgentTaskDetail = () => {
         <PanelRow label="Deadline" value={formatDeadline(task.deadline)} />
         <PanelRow label="Requester" value={`${task.requester.slice(0, 6)}…${task.requester.slice(-4)}`} />
         <PanelRow label="Assigned agent" value={task.assigned_agent ? `${task.assigned_agent.slice(0, 6)}…${task.assigned_agent.slice(-4)}` : '-'} />
+        {task.assigned_agent && (
+          <PanelRow label="Agent gets paid" value={`${task.assigned_price} GEN`} />
+        )}
       </PanelSection>
       {escrow && (
         <PanelSection title="Escrow">
@@ -545,8 +548,9 @@ const AgentTaskDetail = () => {
               {releaseEligible ? <Unlock className="h-5 w-5 text-success shrink-0 mt-0.5" /> : <Lock className="h-5 w-5 text-secondary shrink-0 mt-0.5" />}
               <div className="flex-1 space-y-2">
                 <p className="text-sm text-foreground/85">
-                  {escrow.lockedAmount} GEN is locked, payable to{' '}
-                  {task.status === 'verified' ? 'the agent' : 'the requester (refund)'}.
+                  {task.status === 'verified'
+                    ? `${escrow.lockedAmount} GEN is locked - ${task.assigned_price} GEN pays the agent (its winning bid), ${escrow.lockedAmount - task.assigned_price} GEN refunds the requester.`
+                    : `${escrow.lockedAmount} GEN is locked, payable to the requester (refund).`}
                   {isTerminalNoOutcome
                     ? ' No dispute window applies here - anyone can release it now.'
                     : releaseEligible

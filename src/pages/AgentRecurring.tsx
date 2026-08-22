@@ -9,12 +9,17 @@ import {
   createRecurringTask,
   getSeriesCount,
   getSeries,
+  getSeriesBids,
+  bidRecurringSeries,
+  awardRecurringSeries,
   cancelRecurringSeries,
+  getAgent,
   type RecurringSeries,
+  type Bid,
 } from '@/lib/agentContract';
 import { NETWORKS } from '@/lib/networks';
 import { toast } from 'sonner';
-import { Repeat, Wallet, Rocket, Ban, ArrowLeft } from 'lucide-react';
+import { Repeat, Wallet, Rocket, Ban, ArrowLeft, Gavel, Users, CheckCircle2 } from 'lucide-react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
 interface SeriesRow extends RecurringSeries {
@@ -22,6 +27,97 @@ interface SeriesRow extends RecurringSeries {
 }
 
 const DAY_SECONDS = 86400;
+
+function SeriesCard({
+  s, address, myAgentActive, isConnected, onBid, onAward, onCancel,
+}: {
+  s: SeriesRow;
+  address?: string;
+  myAgentActive: boolean;
+  isConnected: boolean;
+  onBid: (id: number, price: number, eta: number) => Promise<void>;
+  onAward: (id: number) => Promise<void>;
+  onCancel: (id: number) => Promise<void>;
+}) {
+  const [price, setPrice] = useState('');
+  const [eta, setEta] = useState('');
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [busy, setBusy] = useState(false);
+  const { network } = useWallet();
+
+  const now = Date.now() / 1000;
+  const biddingOpen = !s.awarded && now <= s.bidding_deadline;
+  const canAward = !s.awarded && now > s.bidding_deadline;
+  const isRequester = !!address && s.requester.toLowerCase() === address.toLowerCase();
+  const alreadyBid = !!address && bids.some((b) => b.agent.toLowerCase() === address.toLowerCase());
+
+  useEffect(() => {
+    if (!s.awarded) {
+      getSeriesBids(network, s.id).then(setBids).catch(() => setBids([]));
+    }
+  }, [network, s.id, s.awarded]);
+
+  return (
+    <CodeCard title={s.title} variant={s.awarded ? 'default' : 'blue'}>
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          {s.capability_required} · {s.budget_per_occurrence} GEN/round ceiling · every {Math.round(s.interval_seconds / DAY_SECONDS)}d
+        </p>
+
+        {s.awarded ? (
+          <>
+            <p className="text-xs text-foreground/85 flex items-center gap-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+              Committed to {s.committed_agent.slice(0, 6)}…{s.committed_agent.slice(-4)} at {s.committed_price} GEN/round
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {s.remaining} occurrence{s.remaining === 1 ? '' : 's'} remaining · {s.active ? 'active' : 'finished'}
+              {s.active && ` · next advance ${formatDistanceToNowStrict(new Date(s.next_advance_at * 1000), { addSuffix: true })}`}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" /> {bids.length} bid{bids.length === 1 ? '' : 's'} ·{' '}
+              {biddingOpen ? `closes ${formatDistanceToNowStrict(new Date(s.bidding_deadline * 1000), { addSuffix: true })}` : 'bidding closed'}
+            </p>
+            {biddingOpen && isConnected && myAgentActive && !isRequester && !alreadyBid && (
+              <div className="flex gap-2">
+                <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price/round (GEN)" className="bg-background border-border text-sm h-8" />
+                <Input type="number" value={eta} onChange={(e) => setEta(e.target.value)} placeholder="ETA (h)" className="bg-background border-border text-sm h-8 w-28" />
+                <button
+                  onClick={async () => { setBusy(true); await onBid(s.id, parseFloat(price), parseFloat(eta)); setBusy(false); }}
+                  disabled={busy || !price || !eta}
+                  className="tool-btn-primary h-8 shrink-0"
+                >
+                  <Gavel className="h-3.5 w-3.5" /> Bid
+                </button>
+              </div>
+            )}
+            {canAward && isConnected && (
+              <button
+                onClick={async () => { setBusy(true); await onAward(s.id); setBusy(false); }}
+                disabled={busy}
+                className="tool-btn-primary h-8 w-full"
+              >
+                {busy ? 'Awarding…' : bids.length === 0 ? 'Close (no bids - refund)' : 'Award to Best Bid'}
+              </button>
+            )}
+            {isRequester && (
+              <button
+                onClick={async () => { setBusy(true); await onCancel(s.id); setBusy(false); }}
+                disabled={busy}
+                className="tool-btn h-7 shrink-0 border border-destructive/30 text-destructive hover:bg-destructive/10"
+              >
+                <Ban className="h-3 w-3" /> Cancel
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </CodeCard>
+  );
+}
 
 const AgentRecurring = () => {
   const navigate = useNavigate();
@@ -37,7 +133,7 @@ const AgentRecurring = () => {
   const [posting, setPosting] = useState(false);
   const [series, setSeries] = useState<SeriesRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cancelling, setCancelling] = useState<number | null>(null);
+  const [myAgentActive, setMyAgentActive] = useState(false);
 
   const agentsAvailable = !!NETWORKS[network].agentFactoryAddress;
   const totalCost = (parseFloat(budget) || 0) * (parseInt(occurrences) || 0);
@@ -64,10 +160,17 @@ const AgentRecurring = () => {
         })
       );
       setSeries(rows.filter((r): r is SeriesRow => r !== null).reverse());
+      if (address) {
+        try {
+          setMyAgentActive((await getAgent(network, address)).active);
+        } catch {
+          setMyAgentActive(false);
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [network, agentsAvailable]);
+  }, [network, agentsAvailable, address]);
 
   useEffect(() => {
     refreshSeries();
@@ -88,7 +191,7 @@ const AgentRecurring = () => {
         intervalSeconds: (parseFloat(intervalDays) || 1) * DAY_SECONDS,
         occurrences: parseInt(occurrences),
       });
-      toast.success('Recurring task created - first occurrence is open for bids.');
+      toast.success('Series created - open for agent bids for 2 minutes.');
       setTitle('');
       setCapability('');
       setDescription('');
@@ -101,17 +204,36 @@ const AgentRecurring = () => {
     }
   }, [client, canPost, network, title, description, criteria, capability, budget, durationDays, intervalDays, occurrences, totalCost, refreshSeries]);
 
+  const handleBid = useCallback(async (id: number, price: number, eta: number) => {
+    if (!client) return;
+    try {
+      await bidRecurringSeries(client, network, id, price, eta);
+      toast.success('Bid placed!');
+      await refreshSeries();
+    } catch (err: any) {
+      toast.error(`Bid failed: ${err.message}`);
+    }
+  }, [client, network, refreshSeries]);
+
+  const handleAward = useCallback(async (id: number) => {
+    if (!client) return;
+    try {
+      await awardRecurringSeries(client, network, id);
+      toast.success('Series awarded - the committed agent starts working.');
+      await refreshSeries();
+    } catch (err: any) {
+      toast.error(`Award failed: ${err.message}`);
+    }
+  }, [client, network, refreshSeries]);
+
   const handleCancel = useCallback(async (id: number) => {
     if (!client) return;
-    setCancelling(id);
     try {
       await cancelRecurringSeries(client, network, id);
       toast.success('Series cancelled - unspent budget refunded.');
       await refreshSeries();
     } catch (err: any) {
       toast.error(`Cancel failed: ${err.message}`);
-    } finally {
-      setCancelling(null);
     }
   }, [client, network, refreshSeries]);
 
@@ -152,15 +274,16 @@ const AgentRecurring = () => {
         <div>
           <h1 className="text-lg font-semibold text-foreground mb-1">Recurring Tasks</h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Pre-fund every occurrence up front - GenLayer contracts can't pull funds from your
-            wallet later, so this is what makes automatic reposting possible. Once an occurrence
-            settles and its escrow releases, anyone can advance the series to deploy the next one
-            from the pre-funded pool - no new payment needed.
+            One auction for the whole series: pre-fund every occurrence's ceiling up front (GenLayer
+            contracts can't pull funds from your wallet later), agents bid once for the entire plan,
+            and the winner commits to fulfilling every round at that agreed price. Once a round
+            settles, anyone can advance the series to deploy the next round from the pre-funded pool -
+            no new payment, no re-auction.
           </p>
         </div>
 
         {isConnected && (
-          <CodeCard title="New Recurring Task" variant="blue">
+          <CodeCard title="New Recurring Series" variant="blue">
             <div className="space-y-3">
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="bg-background border-border text-sm" />
               <Input value={capability} onChange={(e) => setCapability(e.target.value)} placeholder="Capability required" className="bg-background border-border text-sm" />
@@ -168,7 +291,7 @@ const AgentRecurring = () => {
               <Textarea value={criteria} onChange={(e) => setCriteria(e.target.value)} placeholder="Completion rubric" className="bg-background border-border text-sm min-h-[60px]" />
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div>
-                  <label className="text-[11px] text-muted-foreground mb-1 block">Budget/round (GEN)</label>
+                  <label className="text-[11px] text-muted-foreground mb-1 block">Ceiling/round (GEN)</label>
                   <Input type="number" min="1" value={budget} onChange={(e) => setBudget(e.target.value)} className="bg-background border-border text-sm" />
                 </div>
                 <div>
@@ -197,26 +320,16 @@ const AgentRecurring = () => {
         {!loading && series.length > 0 && (
           <div className="space-y-2">
             {series.map((s) => (
-              <CodeCard key={s.id} title={s.title}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs text-muted-foreground space-y-0.5">
-                    <p>{s.capability_required} · {s.budget_per_occurrence} GEN/round · every {Math.round(s.interval_seconds / DAY_SECONDS)}d</p>
-                    <p>{s.remaining} occurrence{s.remaining === 1 ? '' : 's'} remaining · {s.active ? 'active' : 'inactive'}</p>
-                    {s.active && (
-                      <p>Next advance {formatDistanceToNowStrict(new Date(s.next_advance_at * 1000), { addSuffix: true })}</p>
-                    )}
-                  </div>
-                  {s.active && address && s.requester.toLowerCase() === address.toLowerCase() && (
-                    <button
-                      onClick={() => handleCancel(s.id)}
-                      disabled={cancelling === s.id}
-                      className="tool-btn h-7 shrink-0 border border-destructive/30 text-destructive hover:bg-destructive/10"
-                    >
-                      <Ban className="h-3 w-3" /> {cancelling === s.id ? 'Cancelling…' : 'Cancel'}
-                    </button>
-                  )}
-                </div>
-              </CodeCard>
+              <SeriesCard
+                key={s.id}
+                s={s}
+                address={address}
+                myAgentActive={myAgentActive}
+                isConnected={isConnected}
+                onBid={handleBid}
+                onAward={handleAward}
+                onCancel={handleCancel}
+              />
             ))}
           </div>
         )}

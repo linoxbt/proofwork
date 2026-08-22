@@ -4,6 +4,14 @@
 # bidding, assigned to the winning agent, worked, AI-verified, and settled.
 # Deployed as a child of AgentTaskFactory (see agent_task_factory.py) - not
 # deployed directly.
+#
+# A close port of Polaris's TaskRegistry.sol + BidEngine.sol bidding/scoring,
+# adapted to GenLayer: AI-consensus verification (gl.eq_principle) instead of
+# a trusted-signer verification oracle - the whole reason to use GenLayer in
+# the first place - and a deterministic pseudo-random tiebreak instead of
+# Polaris's block.prevrandao (GenVM's execution model has no miner-revealed
+# per-block entropy to draw on); both are equally non-cryptographic by design
+# and documented as such, on both sides.
 
 from genlayer import *
 
@@ -20,12 +28,29 @@ BIDDING_WINDOW_SECONDS = 120  # short auction window, agents bid autonomously
 REPUTATION_FLOOR = 70  # minimum reputation required to place a bid
 PASS_SCORE = 70  # AI score (0-100) required to pass verification
 MAX_DISPUTES = 3
+MAX_BIDS_PER_TASK = 50
 
 
 def _capability_matches(agent_capabilities: str, required: str) -> bool:
     if not required.strip():
         return True
     return required.strip().lower() in agent_capabilities.lower()
+
+
+def _price_score(price: int) -> float:
+    if price <= 0:
+        return 0.0
+    return float(min(100, 100 // price))
+
+
+def _speed_score(eta_hours: int) -> float:
+    if eta_hours <= 1:
+        return 100.0
+    return float(100 // eta_hours)
+
+
+def _rep_score(reputation: int) -> float:
+    return float(min(reputation, 1000)) / 10.0
 
 
 class AgentTask(gl.Contract):
@@ -41,6 +66,7 @@ class AgentTask(gl.Contract):
     bidding_deadline: u256
     bids: DynArray[str]  # JSON: {"agent": str, "price": int, "eta_hours": int}
     assigned_agent: str
+    assigned_price: u256  # winning bid's price (whole GEN) - what the agent actually gets paid
     submission_url: str
     submission_note: str
     submission_snapshot: str
@@ -63,6 +89,8 @@ class AgentTask(gl.Contract):
         capability_required: str,
         budget: int,
         deadline: int,
+        direct_agent: str,
+        direct_price: int,
     ):
         now = int(datetime.now(timezone.utc).timestamp())
         assert deadline > now, "Deadline must be in the future"
@@ -77,16 +105,28 @@ class AgentTask(gl.Contract):
         self.deadline = deadline
         bidding_close = now + BIDDING_WINDOW_SECONDS
         self.bidding_deadline = bidding_close if bidding_close < deadline else deadline
-        self.assigned_agent = ""
         self.submission_url = ""
         self.submission_note = ""
         self.submission_snapshot = ""
-        self.status = "open"
         self.verification_result = ""
         self.dispute_count = 0
         self.dispute_reason = ""
         self.created_at = now
         self.verified_at = 0
+
+        if direct_agent:
+            # Direct hire / agent-to-agent delegation, or a committed
+            # occurrence of a recurring series - skips the auction entirely.
+            # The caller (AgentTaskFactory) is responsible for telling the
+            # registry this agent now has an active task; __init__ never
+            # makes cross-contract calls itself.
+            self.assigned_agent = direct_agent
+            self.assigned_price = u256(direct_price)
+            self.status = "assigned"
+        else:
+            self.assigned_agent = ""
+            self.assigned_price = u256(0)
+            self.status = "open"
 
     @gl.public.write
     def place_bid(self, price: int, eta_hours: int) -> None:
@@ -96,6 +136,7 @@ class AgentTask(gl.Contract):
         assert now <= self.bidding_deadline, "Bidding window has closed"
         assert price > 0, "Price must be positive"
         assert eta_hours > 0, "ETA must be positive"
+        assert len(self.bids) < MAX_BIDS_PER_TASK, "This task has reached the maximum number of bids"
 
         registry = gl.get_contract_at(Address(self.registry))
         agent = registry.view().get_agent(caller)
@@ -116,32 +157,37 @@ class AgentTask(gl.Contract):
         assert self.status == "open", "Bidding is not open"
         assert now > self.bidding_deadline, "Bidding window still open"
 
-        if len(self.bids) == 0:
-            self.status = "expired"
-            return
-
         registry = gl.get_contract_at(Address(self.registry))
         parsed = [json.loads(raw) for raw in self.bids]
-        prices = [int(b["price"]) for b in parsed]
-        etas = [int(b["eta_hours"]) for b in parsed]
-        min_price, max_price = min(prices), max(prices)
-        min_eta, max_eta = min(etas), max(etas)
 
         best_agent = ""
+        best_price = 0
         best_score = -1.0
-        for b in parsed:
-            price_score = 1.0 if max_price == min_price else 1.0 - (int(b["price"]) - min_price) / (max_price - min_price)
-            speed_score = 1.0 if max_eta == min_eta else 1.0 - (int(b["eta_hours"]) - min_eta) / (max_eta - min_eta)
+        for i, b in enumerate(parsed):
             agent_info = registry.view().get_agent(b["agent"])
-            rep_score = min(int(agent_info["reputation"]), 1000) / 1000.0
-            seed = f"{gl.message.contract_address}:{b['agent']}".encode()
-            random_component = (int(hashlib.sha256(seed).hexdigest(), 16) % 100000) / 100000.0
-            score = price_score * 0.25 + rep_score * 0.10 + speed_score * 0.10 + random_component * 0.55
+            if not agent_info["active"]:
+                continue  # agent went offline since bidding - skip, like Polaris's awardBid
+            price = int(b["price"])
+            eta_hours = int(b["eta_hours"])
+            seed = f"{gl.message.contract_address}:{b['agent']}:{now}:{i}".encode()
+            rand_score = float(int(hashlib.sha256(seed).hexdigest(), 16) % 101)
+            score = (
+                _price_score(price) * 25
+                + _rep_score(int(agent_info["reputation"])) * 10
+                + _speed_score(eta_hours) * 10
+                + rand_score * 55
+            ) / 100
             if score > best_score:
                 best_score = score
                 best_agent = b["agent"]
+                best_price = price
+
+        if not best_agent:
+            self.status = "expired"
+            return
 
         self.assigned_agent = best_agent
+        self.assigned_price = u256(best_price)
         self.status = "assigned"
         registry.emit(on="accepted").record_task_start(best_agent)
 
@@ -231,6 +277,7 @@ class AgentTask(gl.Contract):
             "bidding_deadline": self.bidding_deadline,
             "bid_count": len(self.bids),
             "assigned_agent": self.assigned_agent,
+            "assigned_price": self.assigned_price,
             "submission_url": self.submission_url,
             "submission_note": self.submission_note,
             "status": self.status,
@@ -239,6 +286,25 @@ class AgentTask(gl.Contract):
             "dispute_reason": self.dispute_reason,
             "created_at": self.created_at,
             "verified_at": self.verified_at,
+        }
+
+    @gl.public.view
+    def get_attestation(self) -> dict:
+        """A permanent, explicit record of the verdict - mirrors Polaris's
+        VerifierBridge.Attestation (agent, passed, score, deliverable,
+        timestamp), which is stored as its own on-chain record there."""
+        verified = None
+        score = 0
+        if self.verification_result:
+            parsed = json.loads(self.verification_result)
+            verified = bool(parsed.get("verified"))
+            score = int(parsed.get("confidence", 0))
+        return {
+            "agent": self.assigned_agent,
+            "passed": verified,
+            "score": score,
+            "deliverable_url": self.submission_url,
+            "timestamp": self.verified_at,
         }
 
     @gl.public.view

@@ -4,7 +4,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { PanelSection, PanelRow } from '@/components/shell/StudioPanel';
 import { CodeCard } from '@/components/CodeCard';
 import { useWallet } from '@/hooks/useWallet';
-import { createAgentTask } from '@/lib/agentContract';
+import { createAgentTask, createDirectTask } from '@/lib/agentContract';
 import { NETWORKS } from '@/lib/networks';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,18 +24,20 @@ function combineDateAndTime(date: Date, time: string): Date {
 const CreateAgentTask = () => {
   const navigate = useNavigate();
   const { isConnected, connect, client, network } = useWallet();
+  const [mode, setMode] = useState<'auction' | 'direct'>('auction');
   const [title, setTitle] = useState('');
   const [capability, setCapability] = useState('');
   const [description, setDescription] = useState('');
   const [criteria, setCriteria] = useState('');
   const [budget, setBudget] = useState('10');
+  const [directAgent, setDirectAgent] = useState('');
   const [deadlineDate, setDeadlineDate] = useState<Date | undefined>(addDays(new Date(), 2));
   const [deadlineTime, setDeadlineTime] = useState('17:00');
   const [deploying, setDeploying] = useState(false);
 
   const agentsAvailable = !!NETWORKS[network].agentFactoryAddress;
   const deadline = deadlineDate ? combineDateAndTime(deadlineDate, deadlineTime) : undefined;
-  const canDeploy = title && capability && description && criteria && deadline;
+  const canDeploy = title && capability && description && criteria && deadline && (mode === 'auction' || directAgent.trim());
 
   const handleDeploy = useCallback(async () => {
     if (!client) {
@@ -57,23 +59,38 @@ const CreateAgentTask = () => {
     }
     setDeploying(true);
     try {
-      toast.info(`Posting task and locking ${budgetAmount} GEN in escrow…`);
-      const addr = await createAgentTask(client, network, {
-        title,
-        description,
-        criteria,
-        capabilityRequired: capability,
-        budget: budgetAmount,
-        deadlineUnixSeconds: Math.floor(deadline.getTime() / 1000),
-      });
-      toast.success('Task posted - the 2-minute agent auction has started.');
-      navigate(`/agents/task/${addr}`);
+      if (mode === 'direct') {
+        toast.info(`Hiring the agent directly and locking ${budgetAmount} GEN in escrow…`);
+        const addr = await createDirectTask(client, network, {
+          title,
+          description,
+          criteria,
+          capabilityRequired: capability,
+          agentAddress: directAgent.trim(),
+          budget: budgetAmount,
+          deadlineUnixSeconds: Math.floor(deadline.getTime() / 1000),
+        });
+        toast.success('Agent hired directly - no auction, work starts now.');
+        navigate(`/agents/task/${addr}`);
+      } else {
+        toast.info(`Posting task and locking ${budgetAmount} GEN in escrow…`);
+        const addr = await createAgentTask(client, network, {
+          title,
+          description,
+          criteria,
+          capabilityRequired: capability,
+          budget: budgetAmount,
+          deadlineUnixSeconds: Math.floor(deadline.getTime() / 1000),
+        });
+        toast.success('Task posted - the 2-minute agent auction has started.');
+        navigate(`/agents/task/${addr}`);
+      }
     } catch (err: any) {
       toast.error(`Post failed: ${err.message}`);
     } finally {
       setDeploying(false);
     }
-  }, [client, canDeploy, deadline, budget, network, title, capability, description, criteria, navigate]);
+  }, [client, canDeploy, deadline, budget, network, title, capability, description, criteria, mode, directAgent, navigate]);
 
   const panel = (
     <>
@@ -87,9 +104,9 @@ const CreateAgentTask = () => {
         <div className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
           <Lock className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
           <p>
-            {budget || 0} GEN locks in escrow on post. Registered agents autonomously bid for 2
-            minutes, the best bid is assigned deterministically, and the agent's deliverable is
-            AI-verified against your rubric - same consensus flow as the human task board.
+            {mode === 'direct'
+              ? `${budget || 0} GEN locks in escrow on post, paid in full to the named agent once verified - no auction, work starts immediately.`
+              : `${budget || 0} GEN locks in escrow on post. Registered agents bid for 2 minutes; the agent is paid exactly its winning bid, with the difference refunded to you. The deliverable is AI-verified against your rubric - same consensus flow as the human task board.`}
           </p>
         </div>
       </PanelSection>
@@ -145,6 +162,40 @@ const CreateAgentTask = () => {
       <div className="max-w-2xl mx-auto p-4">
         <CodeCard title="Task for Agents">
           <div className="space-y-4">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMode('auction')}
+                data-active={mode === 'auction'}
+                className="tool-btn flex-1 h-9 data-[active=true]:bg-primary/15 data-[active=true]:text-primary data-[active=true]:border-primary/30"
+              >
+                Open Auction
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('direct')}
+                data-active={mode === 'direct'}
+                className="tool-btn flex-1 h-9 data-[active=true]:bg-primary/15 data-[active=true]:text-primary data-[active=true]:border-primary/30"
+              >
+                Direct Hire
+              </button>
+            </div>
+            {mode === 'direct' && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Agent Address</label>
+                <Input
+                  value={directAgent}
+                  onChange={(e) => setDirectAgent(e.target.value)}
+                  placeholder="0x… (a registered, active agent)"
+                  className="bg-background border-border text-sm font-mono"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Skips the auction entirely - the named agent is assigned immediately at the full
+                  budget. Find an agent's address in the Explorer. This is also how an agent can hire
+                  a sub-agent, using its own wallet as the requester.
+                </p>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Title</label>
               <Input

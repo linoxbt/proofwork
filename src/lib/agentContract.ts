@@ -8,6 +8,7 @@ import { getReadOnlyClient } from '@/lib/contract';
 
 export interface AgentInfo {
   address: string;
+  registered: boolean;
   capabilities: string;
   stake: number;
   reputation: number;
@@ -28,6 +29,7 @@ export interface AgentTaskState {
   bidding_deadline: number;
   bid_count: number;
   assigned_agent: string;
+  assigned_price: number; // what the agent actually gets paid (its winning bid, not the full budget)
   submission_url: string;
   submission_note: string;
   status: 'open' | 'assigned' | 'submitted' | 'verified' | 'rejected' | 'disputed' | 'cancelled' | 'expired';
@@ -36,6 +38,14 @@ export interface AgentTaskState {
   dispute_reason: string;
   created_at: number;
   verified_at: number;
+}
+
+export interface Attestation {
+  agent: string;
+  passed: boolean | null;
+  score: number;
+  deliverable_url: string;
+  timestamp: number;
 }
 
 export interface Bid {
@@ -49,6 +59,16 @@ export interface CreateAgentTaskInput {
   description: string;
   criteria: string;
   capabilityRequired: string;
+  budget: number;
+  deadlineUnixSeconds: number;
+}
+
+export interface CreateDirectTaskInput {
+  title: string;
+  description: string;
+  criteria: string;
+  capabilityRequired: string;
+  agentAddress: string;
   budget: number;
   deadlineUnixSeconds: number;
 }
@@ -74,6 +94,11 @@ export interface RecurringSeries {
   remaining: number;
   next_advance_at: number;
   active: boolean;
+  awarded: boolean;
+  bidding_deadline: number;
+  bid_count: number;
+  committed_agent: string;
+  committed_price: number;
 }
 
 const TX_WAIT_OPTIONS = {
@@ -116,16 +141,43 @@ export async function registerAgent(client: any, network: NetworkId, capabilitie
   return txHash;
 }
 
-export async function deactivateAgent(client: any, network: NetworkId): Promise<string> {
+export async function goOffline(client: any, network: NetworkId): Promise<string> {
   const { registryAddress } = requireAgentContracts(network);
   const txHash = await client.writeContract({
     address: registryAddress,
-    functionName: 'deactivate_agent',
+    functionName: 'go_offline',
     args: [],
     value: 0,
   });
   const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
-  assertTxSucceeded(receipt, 'Deactivate agent');
+  assertTxSucceeded(receipt, 'Go offline');
+  return txHash;
+}
+
+export async function withdrawStake(client: any, network: NetworkId): Promise<string> {
+  const { registryAddress } = requireAgentContracts(network);
+  const txHash = await client.writeContract({
+    address: registryAddress,
+    functionName: 'withdraw_stake',
+    args: [],
+    value: 0,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Withdraw stake');
+  return txHash;
+}
+
+export async function restake(client: any, network: NetworkId, addGen: number): Promise<string> {
+  const { registryAddress } = requireAgentContracts(network);
+  const valueWei = BigInt(Math.round(addGen * 1e18));
+  const txHash = await client.writeContract({
+    address: registryAddress,
+    functionName: 'restake',
+    args: [],
+    value: valueWei,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Restake');
   return txHash;
 }
 
@@ -164,7 +216,29 @@ export async function createAgentTask(client: any, network: NetworkId, input: Cr
   return tasks[tasks.length - 1];
 }
 
-export async function createRecurringTask(client: any, network: NetworkId, input: CreateRecurringTaskInput): Promise<string> {
+export async function createDirectTask(client: any, network: NetworkId, input: CreateDirectTaskInput): Promise<string> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const valueWei = BigInt(input.budget) * BigInt(10 ** 18);
+  const txHash = await client.writeContract({
+    address: factoryAddress,
+    functionName: 'create_direct_task',
+    args: [input.title, input.description, input.criteria, input.capabilityRequired, input.agentAddress, input.budget, input.deadlineUnixSeconds],
+    value: valueWei,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Direct hire');
+
+  const readClient = getReadOnlyClient(network);
+  const tasks: string[] = await readClient.readContract({ address: factoryAddress, functionName: 'get_all_tasks', args: [] });
+  return tasks[tasks.length - 1];
+}
+
+export async function getAttestation(client: any, contractAddress: string): Promise<Attestation> {
+  const result = await client.readContract({ address: contractAddress, functionName: 'get_attestation', args: [] });
+  return { ...result, score: Number(result.score), timestamp: Number(result.timestamp) } as Attestation;
+}
+
+export async function createRecurringTask(client: any, network: NetworkId, input: CreateRecurringTaskInput): Promise<number> {
   const { factoryAddress } = requireAgentContracts(network);
   const valueWei = BigInt(input.budgetPerOccurrence) * BigInt(input.occurrences) * BigInt(10 ** 18);
   const txHash = await client.writeContract({
@@ -180,8 +254,41 @@ export async function createRecurringTask(client: any, network: NetworkId, input
   assertTxSucceeded(receipt, 'Recurring task creation');
 
   const readClient = getReadOnlyClient(network);
-  const tasks: string[] = await readClient.readContract({ address: factoryAddress, functionName: 'get_all_tasks', args: [] });
-  return tasks[tasks.length - 1];
+  const count: number = Number(await readClient.readContract({ address: factoryAddress, functionName: 'get_series_count', args: [] }));
+  return count;
+}
+
+export async function bidRecurringSeries(client: any, network: NetworkId, seriesId: number, priceGen: number, etaHours: number): Promise<string> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const txHash = await client.writeContract({
+    address: factoryAddress,
+    functionName: 'bid_recurring_series',
+    args: [seriesId, priceGen, etaHours],
+    value: 0,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Bid on series');
+  return txHash;
+}
+
+export async function awardRecurringSeries(client: any, network: NetworkId, seriesId: number): Promise<string> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const txHash = await client.writeContract({
+    address: factoryAddress,
+    functionName: 'award_recurring_series',
+    args: [seriesId],
+    value: 0,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Award series');
+  return txHash;
+}
+
+export async function getSeriesBids(network: NetworkId, seriesId: number): Promise<Bid[]> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const client = getReadOnlyClient(network);
+  const raw: string[] = await client.readContract({ address: factoryAddress, functionName: 'get_series_bids', args: [seriesId] });
+  return raw.map((r) => JSON.parse(r));
 }
 
 export async function advanceRecurringSeries(client: any, network: NetworkId, oldTaskAddress: string): Promise<string> {
@@ -252,6 +359,7 @@ export async function getAgentTaskState(client: any, contractAddress: string): P
     deadline: Number(result.deadline),
     bidding_deadline: Number(result.bidding_deadline),
     bid_count: Number(result.bid_count),
+    assigned_price: Number(result.assigned_price),
     dispute_count: Number(result.dispute_count),
     created_at: Number(result.created_at),
     verified_at: Number(result.verified_at),
