@@ -53,6 +53,29 @@ export interface CreateAgentTaskInput {
   deadlineUnixSeconds: number;
 }
 
+export interface CreateRecurringTaskInput {
+  title: string;
+  description: string;
+  criteria: string;
+  capabilityRequired: string;
+  budgetPerOccurrence: number;
+  deadlineDurationSeconds: number;
+  intervalSeconds: number;
+  occurrences: number;
+}
+
+export interface RecurringSeries {
+  requester: string;
+  title: string;
+  capability_required: string;
+  budget_per_occurrence: number;
+  duration_seconds: number;
+  interval_seconds: number;
+  remaining: number;
+  next_advance_at: number;
+  active: boolean;
+}
+
 const TX_WAIT_OPTIONS = {
   status: TransactionStatus.ACCEPTED,
   retries: 50,
@@ -139,6 +162,80 @@ export async function createAgentTask(client: any, network: NetworkId, input: Cr
   const readClient = getReadOnlyClient(network);
   const tasks: string[] = await readClient.readContract({ address: factoryAddress, functionName: 'get_all_tasks', args: [] });
   return tasks[tasks.length - 1];
+}
+
+export async function createRecurringTask(client: any, network: NetworkId, input: CreateRecurringTaskInput): Promise<string> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const valueWei = BigInt(input.budgetPerOccurrence) * BigInt(input.occurrences) * BigInt(10 ** 18);
+  const txHash = await client.writeContract({
+    address: factoryAddress,
+    functionName: 'create_recurring_task',
+    args: [
+      input.title, input.description, input.criteria, input.capabilityRequired,
+      input.budgetPerOccurrence, input.deadlineDurationSeconds, input.intervalSeconds, input.occurrences,
+    ],
+    value: valueWei,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Recurring task creation');
+
+  const readClient = getReadOnlyClient(network);
+  const tasks: string[] = await readClient.readContract({ address: factoryAddress, functionName: 'get_all_tasks', args: [] });
+  return tasks[tasks.length - 1];
+}
+
+export async function advanceRecurringSeries(client: any, network: NetworkId, oldTaskAddress: string): Promise<string> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const txHash = await client.writeContract({
+    address: factoryAddress,
+    functionName: 'advance_recurring_series',
+    args: [oldTaskAddress],
+    value: 0,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Advance recurring series');
+  return txHash;
+}
+
+export async function cancelRecurringSeries(client: any, network: NetworkId, seriesId: number): Promise<string> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const txHash = await client.writeContract({
+    address: factoryAddress,
+    functionName: 'cancel_recurring_series',
+    args: [seriesId],
+    value: 0,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Cancel recurring series');
+  return txHash;
+}
+
+export async function getSeries(network: NetworkId, seriesId: number): Promise<RecurringSeries> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const client = getReadOnlyClient(network);
+  const result = await client.readContract({ address: factoryAddress, functionName: 'get_series', args: [seriesId] });
+  return {
+    ...result,
+    budget_per_occurrence: Number(result.budget_per_occurrence) / 1e18,
+    duration_seconds: Number(result.duration_seconds),
+    interval_seconds: Number(result.interval_seconds),
+    remaining: Number(result.remaining),
+    next_advance_at: Number(result.next_advance_at),
+  } as RecurringSeries;
+}
+
+export async function getSeriesForTask(network: NetworkId, taskAddress: string): Promise<number> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const client = getReadOnlyClient(network);
+  const result = await client.readContract({ address: factoryAddress, functionName: 'get_series_for_task', args: [taskAddress] });
+  return Number(result);
+}
+
+export async function getSeriesCount(network: NetworkId): Promise<number> {
+  const { factoryAddress } = requireAgentContracts(network);
+  const client = getReadOnlyClient(network);
+  const result = await client.readContract({ address: factoryAddress, functionName: 'get_series_count', args: [] });
+  return Number(result);
 }
 
 export async function getAllAgentTaskAddresses(network: NetworkId): Promise<string[]> {

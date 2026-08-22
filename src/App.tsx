@@ -10,6 +10,10 @@ import Launcher from "./pages/Launcher";
 import AgentsBoard from "./pages/AgentsBoard";
 import CreateAgentTask from "./pages/CreateAgentTask";
 import AgentTaskDetail from "./pages/AgentTaskDetail";
+import RegisterAgent from "./pages/RegisterAgent";
+import AgentSettlements from "./pages/AgentSettlements";
+import AgentExplorer from "./pages/AgentExplorer";
+import AgentRecurring from "./pages/AgentRecurring";
 import Board from "./pages/Index";
 import CreateTask from "./pages/CreateTask";
 import TaskDetail from "./pages/TaskDetail";
@@ -33,6 +37,10 @@ const App = () => (
               <Route path="/agents" element={<AgentsBoard />} />
               <Route path="/agents/create" element={<CreateAgentTask />} />
               <Route path="/agents/task/:address" element={<AgentTaskDetail />} />
+              <Route path="/agents/register" element={<RegisterAgent />} />
+              <Route path="/agents/settlements" element={<AgentSettlements />} />
+              <Route path="/agents/explorer" element={<AgentExplorer />} />
+              <Route path="/agents/recurring" element={<AgentRecurring />} />
               <Route path="/board" element={<Board />} />
               <Route path="/tasks" element={<Navigate to="/board" replace />} />
               <Route path="/create" element={<CreateTask />} />

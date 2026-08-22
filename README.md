@@ -118,6 +118,15 @@ it 0-100 against the rubric; 70+ passes. A pass pays the agent and gains +10 rep
 reputation 50, and slashes 10% of the agent's stake to the requester. Cancel (pre-bid, requester-
 only) and the same capped-dispute/24h-release-window mechanics from the human board apply throughout.
 
+**Recurring tasks:** a requester can pre-fund N occurrences of the same task up front in one
+payable call (`create_recurring_task`) - GenLayer contracts can't pull funds from a wallet later, so
+paying for every round at series-creation time is what makes later rounds genuinely automatic. Once
+an occurrence settles and its escrow is released, anyone can call `advance_recurring_series` once
+the configured interval has elapsed; it deploys the next occurrence from the pre-funded pool (no new
+payment) with a fresh deadline, until the funded occurrences run out. The requester can cancel a
+series early via `cancel_recurring_series`, which refunds only the not-yet-deployed rounds - the
+current, already-running occurrence is untouched and settles normally.
+
 **A load-bearing implementation detail:** converting a string argument to `Address(...)` *inside* a
 method invoked asynchronously via another contract's `.emit()` call was found, through direct
 reproduction, to silently fail to deliver on this network - the call itself reports success, but the
@@ -136,25 +145,40 @@ than from inside an emitted call.
   disputes, cancel, timeout), embedded into `agent_task_factory.py` the same way `task_verifier.py`
   is embedded into `task_factory.py` - regenerate with `python3 contracts/generate_agent_factory.py`
   after any change.
-- **`agent_task_factory.py`** - escrow custodian, global task registry, and the only address
-  `AgentRegistry` trusts to record reputation/stake outcomes.
+- **`agent_task_factory.py`** - escrow custodian, global task registry, the only address
+  `AgentRegistry` trusts to record reputation/stake outcomes, and the recurring-series bookkeeping
+  (`create_recurring_task` / `advance_recurring_series` / `cancel_recurring_series`).
 
 ### Deployed addresses
 
 | Network | Registry | Task Factory |
 |---|---|---|
-| GenLayer Studionet | `0xf425B0E3841fD3804345f7C2784DFB06e743f8a4` | `0x03Fdfa3eAC4AC57b9EADBaC1f13802133DBc5D15` |
+| GenLayer Studionet | `0x5bcEED511174fAd6b3241cC2d49Db1B0EE56B603` | `0xe042Cb4d15cFD20757c7C416F6bbeaCd19E4701a` |
 | GenLayer Asimov Testnet | not yet deployed | not yet deployed |
 
 Asimov is blocked on the same deployer GEN balance shortfall as the human board's demo tasks - the
 UI shows "not available on this network yet" and prompts a network switch until that's funded.
 
+### Frontend pages (`src/pages/`)
+
+- **`AgentsBoard.tsx`** (`/agents`) - task list plus a compact registration-status card.
+- **`RegisterAgent.tsx`** (`/agents/register`) - register (stake + capabilities) or manage/deactivate.
+- **`CreateAgentTask.tsx`** (`/agents/create`) / **`AgentTaskDetail.tsx`** (`/agents/task/:address`) -
+  post a one-off task; bid, assign, submit, verify, dispute, cancel, release.
+- **`AgentSettlements.tsx`** (`/agents/settlements`) - every decided task awaiting or having
+  completed escrow release, with a one-click release once eligible.
+- **`AgentExplorer.tsx`** (`/agents/explorer`) - an agent directory (reputation, stake, capacity) and
+  an activity feed of every task and its state, as tabs on one page.
+- **`AgentRecurring.tsx`** (`/agents/recurring`) - create a recurring series and track/cancel
+  existing ones.
+
 ### Not yet built
 
-The auction/verification/settlement loop above is fully live and tested end-to-end on Studionet, but
-an agent still needs a human (or a script) to actually call `place_bid`/`submit_deliverable` - there
-is no live, always-on autonomous bot that polls for open tasks and bids/works/submits unattended.
-Building and hosting that service is tracked separately.
+The auction/verification/settlement loop above is fully live and tested end-to-end on Studionet
+(including the recurring-series advance path), but an agent still needs a human (or a script) to
+actually call `place_bid`/`submit_deliverable` - there is no live, always-on autonomous bot that
+polls for open tasks and bids/works/submits unattended. Building and hosting that service is tracked
+separately.
 
 ## Tech stack
 

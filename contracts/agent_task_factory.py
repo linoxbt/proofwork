@@ -35,27 +35,41 @@ class AgentTaskFactory(gl.Contract):
     escrow_released: TreeMap[Address, bool]
     task_count: u256
 
+    # Recurring series: a requester pre-funds N occurrences up front in one
+    # payable call; each occurrence after the first is deployed from that
+    # pre-funded pool (no new transfer needed) once the prior one settles and
+    # the interval has elapsed.
+    next_series_id: u256
+    series_task: TreeMap[Address, u256]  # deployed task address -> series id (0 = not part of a series)
+    series_requester: TreeMap[u256, str]
+    series_title: TreeMap[u256, str]
+    series_description: TreeMap[u256, str]
+    series_criteria: TreeMap[u256, str]
+    series_capability: TreeMap[u256, str]
+    series_budget: TreeMap[u256, u256]  # per occurrence, atto-GEN
+    series_duration: TreeMap[u256, u256]  # deadline_duration_seconds per occurrence
+    series_interval: TreeMap[u256, u256]  # min gap before the next occurrence can be posted
+    series_remaining: TreeMap[u256, u256]  # occurrences left, including the current one
+    series_next_advance_at: TreeMap[u256, u256]
+    series_active: TreeMap[u256, bool]
+
     def __init__(self, registry_address: str):
         self.registry = registry_address
         self.task_count = 0
+        self.next_series_id = 0
 
-    @gl.public.write.payable
-    def create_task(
+    def _deploy_child_task(
         self,
+        requester: str,
         title: str,
         description: str,
         criteria: str,
         capability_required: str,
         budget: int,
         deadline: int,
-    ) -> str:
-        expected_value = u256(budget) * u256(10**18)
-        assert gl.message.value == expected_value, "Sent value must equal budget GEN (in atto-GEN)"
-
-        requester = str(gl.message.sender_address)
+    ) -> Address:
         factory_address = str(gl.message.contract_address)
         task_code = base64.b64decode(AGENT_TASK_CODE_B64)
-
         addr = gl.deploy_contract(
             code=task_code,
             args=[
@@ -72,12 +86,155 @@ class AgentTaskFactory(gl.Contract):
             salt_nonce=int(self.task_count) + 1,
             on="accepted",
         )
-
         self.tasks.append(addr)
+        self.task_count += 1
+        return addr
+
+    @gl.public.write.payable
+    def create_task(
+        self,
+        title: str,
+        description: str,
+        criteria: str,
+        capability_required: str,
+        budget: int,
+        deadline: int,
+    ) -> str:
+        expected_value = u256(budget) * u256(10**18)
+        assert gl.message.value == expected_value, "Sent value must equal budget GEN (in atto-GEN)"
+
+        requester = str(gl.message.sender_address)
+        addr = self._deploy_child_task(requester, title, description, criteria, capability_required, budget, deadline)
         self.escrow[addr] = gl.message.value
         self.escrow_released[addr] = False
-        self.task_count += 1
         return str(addr)
+
+    @gl.public.write.payable
+    def create_recurring_task(
+        self,
+        title: str,
+        description: str,
+        criteria: str,
+        capability_required: str,
+        budget_per_occurrence: int,
+        deadline_duration_seconds: int,
+        interval_seconds: int,
+        occurrences: int,
+    ) -> str:
+        assert occurrences >= 1, "Must fund at least 1 occurrence"
+        assert deadline_duration_seconds > 0, "Duration must be positive"
+        assert interval_seconds >= 0, "Interval cannot be negative"
+        expected_value = u256(budget_per_occurrence) * u256(occurrences) * u256(10**18)
+        assert gl.message.value == expected_value, \
+            "Sent value must equal budget_per_occurrence * occurrences GEN (in atto-GEN)"
+
+        requester = str(gl.message.sender_address)
+        now = int(datetime.now(timezone.utc).timestamp())
+        deadline = now + deadline_duration_seconds
+
+        addr = self._deploy_child_task(
+            requester, title, description, criteria, capability_required, budget_per_occurrence, deadline
+        )
+        self.escrow[addr] = u256(budget_per_occurrence) * u256(10**18)
+        self.escrow_released[addr] = False
+
+        self.next_series_id += 1
+        series_id = self.next_series_id
+        self.series_task[addr] = series_id
+        self.series_requester[series_id] = requester
+        self.series_title[series_id] = title
+        self.series_description[series_id] = description
+        self.series_criteria[series_id] = criteria
+        self.series_capability[series_id] = capability_required
+        self.series_budget[series_id] = u256(budget_per_occurrence) * u256(10**18)
+        self.series_duration[series_id] = u256(deadline_duration_seconds)
+        self.series_interval[series_id] = u256(interval_seconds)
+        self.series_remaining[series_id] = u256(occurrences)
+        self.series_next_advance_at[series_id] = u256(now + interval_seconds)
+        self.series_active[series_id] = True
+        return str(addr)
+
+    @gl.public.write
+    def advance_recurring_series(self, old_task_address: str) -> None:
+        old_addr = Address(old_task_address)
+        series_id = self.series_task.get(old_addr, u256(0))
+        assert series_id != 0, "Task is not part of a recurring series"
+        assert self.series_active.get(series_id, False), "Series is no longer active"
+        assert self.series_remaining.get(series_id, u256(0)) > 1, "This was the last funded occurrence"
+        assert self.escrow_released.get(old_addr, False), "Release the current occurrence's escrow first"
+
+        now = int(datetime.now(timezone.utc).timestamp())
+        assert now >= int(self.series_next_advance_at[series_id]), "Too early for the next occurrence"
+
+        other = gl.get_contract_at(old_addr)
+        old_status = other.view().get_task_state()["status"]
+        assert old_status in ("verified", "rejected", "cancelled", "expired"), \
+            "Current occurrence has not reached a terminal state"
+
+        requester = self.series_requester[series_id]
+        duration = int(self.series_duration[series_id])
+        budget_atto = self.series_budget[series_id]
+        new_deadline = now + duration
+
+        new_addr = self._deploy_child_task(
+            requester,
+            self.series_title[series_id],
+            self.series_description[series_id],
+            self.series_criteria[series_id],
+            self.series_capability[series_id],
+            int(budget_atto // u256(10**18)),
+            new_deadline,
+        )
+        self.escrow[new_addr] = budget_atto
+        self.escrow_released[new_addr] = False
+        self.series_task[new_addr] = series_id
+
+        remaining = self.series_remaining[series_id] - 1
+        self.series_remaining[series_id] = remaining
+        self.series_next_advance_at[series_id] = u256(now + int(self.series_interval[series_id]))
+        if remaining <= 1:
+            self.series_active[series_id] = False
+
+    @gl.public.write
+    def cancel_recurring_series(self, series_id: int) -> None:
+        sid = u256(series_id)
+        caller = str(gl.message.sender_address)
+        assert self.series_requester.get(sid, "") == caller, "Only the series requester can cancel"
+        assert self.series_active.get(sid, False), "Series is already inactive"
+
+        remaining = self.series_remaining.get(sid, u256(0))
+        self.series_active[sid] = False
+        # Refund every occurrence that hasn't been deployed yet - the current
+        # (already-deployed) occurrence's own escrow is untouched and settles
+        # normally through release_funds.
+        if remaining > 1:
+            refund = self.series_budget[sid] * (remaining - u256(1))
+            if refund > 0:
+                _Recipient(Address(caller)).emit_transfer(value=refund)
+        self.series_remaining[sid] = u256(1) if remaining > 0 else u256(0)
+
+    @gl.public.view
+    def get_series(self, series_id: int) -> dict:
+        sid = u256(series_id)
+        return {
+            "requester": self.series_requester.get(sid, ""),
+            "title": self.series_title.get(sid, ""),
+            "capability_required": self.series_capability.get(sid, ""),
+            "budget_per_occurrence": self.series_budget.get(sid, u256(0)),
+            "duration_seconds": self.series_duration.get(sid, u256(0)),
+            "interval_seconds": self.series_interval.get(sid, u256(0)),
+            "remaining": self.series_remaining.get(sid, u256(0)),
+            "next_advance_at": self.series_next_advance_at.get(sid, u256(0)),
+            "active": self.series_active.get(sid, False),
+        }
+
+    @gl.public.view
+    def get_series_for_task(self, task_address: str) -> int:
+        return int(self.series_task.get(Address(task_address), u256(0)))
+
+    @gl.public.view
+    def get_series_count(self) -> int:
+        return int(self.next_series_id)
 
     @gl.public.write
     def release_funds(self, task_address: str) -> None:

@@ -4,13 +4,11 @@ import { AppShell } from '@/components/shell/AppShell';
 import { PanelSection, PanelRow } from '@/components/shell/StudioPanel';
 import { CodeCard } from '@/components/CodeCard';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Input } from '@/components/ui/input';
 import { useWallet } from '@/hooks/useWallet';
 import { useAgentTasks } from '@/hooks/useAgentTasks';
-import { getAgent, registerAgent, deactivateAgent, type AgentInfo } from '@/lib/agentContract';
+import { getAgent, type AgentInfo } from '@/lib/agentContract';
 import { NETWORKS } from '@/lib/networks';
-import { toast } from 'sonner';
-import { Plus, Wallet, Bot, ShieldCheck, ArrowLeft, LogOut } from 'lucide-react';
+import { Plus, Wallet, Bot, ShieldCheck, ArrowLeft, Compass, Unlock, Repeat } from 'lucide-react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
 function formatDueIn(deadline: number): string {
@@ -23,13 +21,9 @@ function formatDueIn(deadline: number): string {
 
 const AgentsBoard = () => {
   const navigate = useNavigate();
-  const { address, client, isConnected, connect, network } = useWallet();
+  const { address, isConnected, connect, network } = useWallet();
   const { tasks, loading } = useAgentTasks();
   const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
-  const [capabilities, setCapabilities] = useState('');
-  const [stake, setStake] = useState('1');
-  const [registering, setRegistering] = useState(false);
-  const [deactivating, setDeactivating] = useState(false);
 
   const agentsAvailable = !!NETWORKS[network].agentFactoryAddress;
 
@@ -48,40 +42,6 @@ const AgentsBoard = () => {
   useEffect(() => {
     refreshAgentInfo();
   }, [refreshAgentInfo]);
-
-  const handleRegister = useCallback(async () => {
-    if (!client || !capabilities.trim()) return;
-    const stakeAmount = parseFloat(stake) || 0;
-    if (stakeAmount < 1) {
-      toast.error('Stake must be at least 1 GEN');
-      return;
-    }
-    setRegistering(true);
-    try {
-      await registerAgent(client, network, capabilities, stakeAmount);
-      toast.success('Registered as an agent!');
-      setCapabilities('');
-      await refreshAgentInfo();
-    } catch (err: any) {
-      toast.error(`Registration failed: ${err.message}`);
-    } finally {
-      setRegistering(false);
-    }
-  }, [client, network, capabilities, stake, refreshAgentInfo]);
-
-  const handleDeactivate = useCallback(async () => {
-    if (!client) return;
-    setDeactivating(true);
-    try {
-      await deactivateAgent(client, network);
-      toast.success('Deactivated - stake refunded.');
-      await refreshAgentInfo();
-    } catch (err: any) {
-      toast.error(`Deactivate failed: ${err.message}`);
-    } finally {
-      setDeactivating(false);
-    }
-  }, [client, network, refreshAgentInfo]);
 
   const panel = agentInfo?.active ? (
     <PanelSection title="Your Agent" defaultOpen>
@@ -117,6 +77,15 @@ const AgentsBoard = () => {
           <Bot className="h-4 w-4 text-primary" />
           <span className="text-xs font-medium text-foreground">Agent Economy</span>
           <div className="flex-1" />
+          <button onClick={() => navigate('/agents/explorer')} className="tool-btn">
+            <Compass className="h-3.5 w-3.5" /> Explorer
+          </button>
+          <button onClick={() => navigate('/agents/settlements')} className="tool-btn">
+            <Unlock className="h-3.5 w-3.5" /> Settlements
+          </button>
+          <button onClick={() => navigate('/agents/recurring')} className="tool-btn">
+            <Repeat className="h-3.5 w-3.5" /> Recurring
+          </button>
           <button onClick={() => navigate('/agents/create')} className="tool-btn-primary">
             <Plus className="h-3.5 w-3.5" /> Post Task
           </button>
@@ -130,54 +99,20 @@ const AgentsBoard = () => {
       panel={panel}
     >
       <div className="max-w-4xl mx-auto p-4 space-y-3">
-        {isConnected && !agentInfo?.active && (
-          <CodeCard title="Register as an Agent" variant="blue">
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Stake at least 1 GEN and declare your capabilities to start bidding on open tasks.
-                Reputation starts at 100; a passed task earns +10, a failed or missed one costs -50
-                reputation and 10% of your stake.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-3">
-                <Input
-                  value={capabilities}
-                  onChange={(e) => setCapabilities(e.target.value)}
-                  placeholder="Backend, Research, Writing…"
-                  className="bg-background border-border text-sm"
-                />
-                <Input
-                  type="number"
-                  min="1"
-                  value={stake}
-                  onChange={(e) => setStake(e.target.value)}
-                  className="bg-background border-border text-sm"
-                />
-              </div>
-              <button
-                onClick={handleRegister}
-                disabled={registering || !capabilities.trim()}
-                className="tool-btn-primary h-8 w-full"
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {registering ? 'Registering…' : `Register & Stake ${stake || 0} GEN`}
-              </button>
-            </div>
-          </CodeCard>
-        )}
-
-        {isConnected && agentInfo?.active && (
-          <CodeCard title="You are a registered agent">
+        {isConnected && (
+          <CodeCard title={agentInfo?.active ? 'You are a registered agent' : 'Not registered as an agent'} variant={agentInfo?.active ? 'default' : 'blue'}>
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm text-foreground/85">
-                <span className="font-medium">{agentInfo.capabilities}</span>
-                <span className="text-muted-foreground"> · reputation {agentInfo.reputation} · {agentInfo.stake} GEN staked</span>
-              </div>
-              {agentInfo.active_tasks === 0 && (
-                <button onClick={handleDeactivate} disabled={deactivating} className="tool-btn h-8">
-                  <LogOut className="h-3.5 w-3.5" />
-                  {deactivating ? 'Deactivating…' : 'Deactivate & Withdraw'}
-                </button>
+              {agentInfo?.active ? (
+                <div className="text-sm text-foreground/85">
+                  <span className="font-medium">{agentInfo.capabilities}</span>
+                  <span className="text-muted-foreground"> · reputation {agentInfo.reputation} · {agentInfo.stake} GEN staked</span>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Stake GEN and declare capabilities to start bidding on open tasks.</p>
               )}
+              <button onClick={() => navigate('/agents/register')} className="tool-btn-primary h-8 shrink-0">
+                <ShieldCheck className="h-3.5 w-3.5" /> {agentInfo?.active ? 'Manage' : 'Register'}
+              </button>
             </div>
           </CodeCard>
         )}
