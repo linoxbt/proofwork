@@ -12,7 +12,9 @@ const STATUSES = [
   { name: 'submitted', desc: 'Evidence has been submitted and is locked. Either party can now request AI verification.' },
   { name: 'verified', desc: 'AI validators reached consensus that the evidence meets the criteria. Escrow will pay the worker.' },
   { name: 'rejected', desc: 'AI validators reached consensus that the evidence does not meet the criteria. Escrow will refund the creator.' },
-  { name: 'disputed', desc: 'Either party contested a verified/rejected verdict. Escrow release is blocked until re-verification.' },
+  { name: 'disputed', desc: 'Either party contested a verified/rejected verdict. Escrow release is blocked until re-verification. Capped at 3 disputes per task - after that, the last verdict is final.' },
+  { name: 'cancelled', desc: 'The creator cancelled the task before anyone claimed it. Escrow refunds to the creator immediately, no waiting period.' },
+  { name: 'expired', desc: "The deadline passed with no evidence ever submitted. Anyone can mark it expired, refunding the creator's escrow immediately." },
 ];
 
 const FIELDS = [
@@ -114,9 +116,11 @@ const About = () => {
               <div>
                 <p className="font-medium text-foreground">3. Submit evidence</p>
                 <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
-                  The worker submits a URL matching the requested evidence format. This locks the
-                  submission - it cannot be changed afterward. Submitting does not trigger verification
-                  by itself; that's a separate, explicit step.
+                  The worker submits a URL matching the requested evidence format, plus an optional
+                  note. The contract fetches the evidence right then and commits it - that exact
+                  content is what every future verification judges, even after a dispute, so it can't
+                  drift from what was actually submitted. Submitting does not trigger verification by
+                  itself; that's a separate, explicit step.
                 </p>
               </div>
             </div>
@@ -126,8 +130,8 @@ const About = () => {
                 <p className="font-medium text-foreground">4. Request verification</p>
                 <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
                   Either the creator or the worker can trigger this, any time after submission.
-                  Independent AI validators fetch the evidence fresh and judge it against the rubric,
-                  reaching consensus on a verdict, a confidence score, and their reasoning.
+                  Independent AI validators judge the evidence committed at submission time against
+                  the rubric, reaching consensus on a verdict, a confidence score, and their reasoning.
                 </p>
               </div>
             </div>
@@ -139,7 +143,9 @@ const About = () => {
                   If either party disagrees with the verdict, they can file a dispute with a reason.
                   This moves the task to "disputed," which blocks the escrow release. The next
                   verification run is given that reason as context, so validators specifically
-                  re-examine the point raised rather than repeating the same judgment.
+                  re-examine the point raised rather than repeating the same judgment. Each task allows
+                  at most 3 disputes - once that's used up, the current verdict is final and the 24-hour
+                  countdown can no longer be reset.
                 </p>
               </div>
             </div>
@@ -151,6 +157,18 @@ const About = () => {
                   24 hours after a verdict stands undisputed, anyone can trigger the release - it isn't
                   restricted to the two parties, so it can't get stuck waiting on someone. Verified
                   tasks pay the worker; rejected tasks refund the creator.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <XCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground">7. Cancel or reclaim (the escape hatches)</p>
+                <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+                  A creator can cancel an unclaimed task for an instant refund. If a task is claimed but
+                  the deadline passes with nothing ever submitted, anyone can mark it expired - also an
+                  instant refund to the creator, no 24-hour wait either way, since there's nothing to
+                  dispute in either case.
                 </p>
               </div>
             </div>

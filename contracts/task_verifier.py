@@ -13,6 +13,8 @@ ERROR_EXTERNAL = "[EXTERNAL]"  # external API 4xx - deterministic, exact match
 ERROR_TRANSIENT = "[TRANSIENT]"  # network/5xx - non-deterministic, agree if both transient
 ERROR_LLM = "[LLM_ERROR]"  # LLM misbehavior - always disagree, force rotation
 
+MAX_DISPUTES = 3  # after this many disputes, the last verdict is final
+
 
 class TaskVerifier(gl.Contract):
     creator: str
@@ -31,7 +33,8 @@ class TaskVerifier(gl.Contract):
     worker: str
     submission_url: str
     submission_note: str
-    status: str  # "open", "claimed", "submitted", "verified", "rejected", "disputed"
+    submission_snapshot: str  # evidence content, frozen at submission time - never re-fetched
+    status: str  # "open", "claimed", "submitted", "verified", "rejected", "disputed", "cancelled", "expired"
     verification_result: str
     dispute_count: u256
     dispute_reason: str
@@ -72,6 +75,7 @@ class TaskVerifier(gl.Contract):
         self.worker = ""
         self.submission_url = ""
         self.submission_note = ""
+        self.submission_snapshot = ""
         self.status = "open"
         self.verification_result = ""
         self.dispute_count = 0
@@ -105,8 +109,27 @@ class TaskVerifier(gl.Contract):
             assert "github.com" in url_lower, \
                 "This task expects a GitHub Repository URL (github.com)"
 
+        # Commit the evidence content now, once - every verification (including
+        # re-verifications after a dispute) judges this frozen snapshot, never a
+        # live re-fetch, so the content being judged can't drift after submission.
+        def fetch_evidence():
+            try:
+                return gl.nondet.web.render(evidence_url, mode="text")[:8000]
+            except Exception as e:
+                raise gl.vm.UserError(f"{ERROR_TRANSIENT} failed to fetch {evidence_url}: {e}")
+
+        committed_content = gl.eq_principle.prompt_comparative(
+            fetch_evidence,
+            principle=(
+                "Both fetches must be of the same underlying page or resource. Minor "
+                "formatting or incidental dynamic elements (timestamps, counters) may "
+                "differ, but the substantive content must match."
+            ),
+        )
+
         self.submission_url = evidence_url
         self.submission_note = submission_note
+        self.submission_snapshot = committed_content
         self.status = "submitted"
         # Evidence is now locked in. AI verification must be triggered separately
         # via request_verification() by either the creator or the worker.
@@ -123,6 +146,7 @@ class TaskVerifier(gl.Contract):
         caller = str(gl.message.sender_address)
         assert caller in (self.creator, self.worker), "Only creator or worker can dispute"
         assert self.status in ("verified", "rejected"), "Can only dispute a decided verification"
+        assert self.dispute_count < MAX_DISPUTES, "Maximum disputes reached - decision is final"
         self.dispute_count += 1
         self.dispute_reason = reason
         self.status = "disputed"
@@ -132,9 +156,16 @@ class TaskVerifier(gl.Contract):
     def cancel_task(self) -> None:
         caller = str(gl.message.sender_address)
         assert caller == self.creator, "Only creator can cancel"
-        assert self.status in ("open", "claimed"), "Cannot cancel after submission"
-        self.status = "open"
-        self.worker = ""
+        assert self.status == "open", "Can only cancel before the task is claimed"
+        self.status = "cancelled"
+
+    @gl.public.write
+    def expire_task(self) -> None:
+        now = int(datetime.now(timezone.utc).timestamp())
+        assert now > self.deadline, "Deadline has not passed yet"
+        assert self.status in ("open", "claimed"), \
+            "Task already has a submission or is already decided"
+        self.status = "expired"
 
     @gl.public.view
     def get_task_state(self) -> dict:
@@ -182,14 +213,12 @@ class TaskVerifier(gl.Contract):
         submission_format = self.submission_format_other or self.submission_format
         dispute_reason = self.dispute_reason
         is_redispute = self.dispute_count > 0
+        # Judge the content committed at submission time, never a live re-fetch -
+        # this is what keeps a re-verification after a dispute honest: it sees
+        # exactly what was originally submitted, not whatever the URL serves now.
+        web_data = self.submission_snapshot
 
         def analyze():
-            # Fetch the evidence fresh, every time this is called
-            try:
-                web_data = gl.nondet.web.render(submission_url, mode="text")
-            except Exception as e:
-                raise gl.vm.UserError(f"{ERROR_TRANSIENT} failed to fetch {submission_url}: {e}")
-
             dispute_context = ""
             if is_redispute and dispute_reason:
                 dispute_context = f"""

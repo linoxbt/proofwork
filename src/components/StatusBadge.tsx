@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
-  status: 'open' | 'claimed' | 'submitted' | 'verified' | 'rejected' | 'disputed';
+  status: 'open' | 'claimed' | 'submitted' | 'verified' | 'rejected' | 'disputed' | 'cancelled' | 'expired';
   className?: string;
 }
 
@@ -12,6 +12,8 @@ const labels: Record<string, string> = {
   verified: '✓ Verified',
   rejected: '✗ Rejected',
   disputed: 'Disputed',
+  cancelled: 'Cancelled',
+  expired: 'Expired',
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

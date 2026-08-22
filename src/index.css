@@ -142,6 +142,11 @@
     @apply bg-accent/20 text-accent border border-accent/40;
   }
 
+  .status-cancelled,
+  .status-expired {
+    @apply bg-muted text-muted-foreground border border-border;
+  }
+
   .status-dot {
     @apply h-1.5 w-1.5 rounded-full shrink-0;
   }

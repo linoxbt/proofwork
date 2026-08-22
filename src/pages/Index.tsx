@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
-const FILTERS = ['all', 'open', 'claimed', 'submitted', 'disputed', 'verified', 'rejected'] as const;
+const FILTERS = ['all', 'open', 'claimed', 'submitted', 'disputed', 'verified', 'rejected', 'cancelled', 'expired'] as const;
 const VIEW_STORAGE_KEY = 'proofwork-board-view';
 
 function formatDueIn(deadline: number): string {

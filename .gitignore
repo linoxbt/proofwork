@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 __pycache__
+.pytest_cache
+/artifacts
 
 # Editor directories and files
 .vscode/*

@@ -17,17 +17,25 @@ for 24 hours.
 3. **Submit evidence** - the worker submits a URL (GitHub repo, live app, video, doc - whatever
    format the task specifies) plus an optional note describing what they built. The contract
    enforces the expected format where it can be checked deterministically (e.g. a GitHub
-   Repository submission must be a `github.com` URL). This locks the submission; nothing else
-   can be changed after. The evidence and note are only ever readable by the task's creator and
+   Repository submission must be a `github.com` URL), then fetches and *commits* that evidence's
+   content right there via validator consensus - every verification from then on, including
+   re-verifications after a dispute, judges that frozen snapshot rather than re-fetching, so the
+   content being judged can't drift after submission. This locks the submission; nothing else can
+   be changed after. The evidence and note are only ever readable by the task's creator and
    worker - anyone else calling `get_task_state()` sees them redacted as `[private]`.
 4. **Request verification** - *either* the creator or the worker can trigger AI verification at
-   any time after submission. Independent GenLayer validators fetch the evidence fresh, judge it
-   against the rubric, and reach consensus on a verdict (with a confidence score and reasoning).
-5. **Dispute (optional)** - if either party disagrees with the verdict, they can file a dispute
-   with a reason. This blocks the escrow release and the next verification run is given that
-   reason as context, so it's a genuine re-review, not a repeat.
+   any time after submission. Independent GenLayer validators judge the committed evidence
+   against the rubric and reach consensus on a verdict (with a confidence score and reasoning).
+5. **Dispute (optional, capped)** - if either party disagrees with the verdict, they can file a
+   dispute with a reason. This blocks the escrow release and the next verification run is given
+   that reason as context, so it's a genuine re-review, not a repeat. Capped at 3 disputes per
+   task - once used up, the current verdict is final and always eventually clears its 24h window.
 6. **Escrow releases** - 24 hours after a verdict stands undisputed, anyone can call
    `release_funds`. Verified tasks pay the worker; rejected tasks refund the creator.
+7. **Cancel or reclaim** - a creator can cancel an unclaimed (`open`) task for an instant refund.
+   If a task is claimed but its deadline passes with nothing ever submitted, anyone can call
+   `expire_task` to mark it expired, unlocking an instant refund to the creator. Neither path has
+   a waiting period - there's nothing to dispute in either case, so escrow never gets stuck.
 
 ## Architecture
 
@@ -43,9 +51,11 @@ for 24 hours.
   - `get_all_tasks()` / `get_escrow_status(address)` - the views the frontend uses for global,
     all-users task discovery (no off-chain indexer or per-browser storage involved).
 - **`task_verifier.py`** - the child contract holding one task's state machine
-  (`open → claimed → submitted → verified/rejected ⇄ disputed`) and the AI verification logic
-  itself, using `gl.nondet.web.render()` to fetch evidence and `gl.nondet.exec_prompt()` +
-  `gl.eq_principle.prompt_comparative()` for the actual judgment, so validators independently
+  (`open → claimed → submitted → verified/rejected ⇄ disputed`, plus the terminal `cancelled`/
+  `expired` escape hatches) and the AI verification logic itself. `submit_work` commits the
+  evidence once via `gl.nondet.web.render()` wrapped in `gl.eq_principle.prompt_comparative()`;
+  verification then judges that committed snapshot with `gl.nondet.exec_prompt()` +
+  `gl.eq_principle.prompt_comparative()` again for the verdict itself, so validators independently
   re-derive a verdict and must agree rather than trusting a single leader's answer.
 - **`generate_factory.py`** - `task_verifier.py` is the single source of truth for the child
   contract; this script base64-embeds its current source into `task_factory.py` (as
@@ -62,8 +72,8 @@ never deploys a new factory, only new tasks through the existing one.
 
 | Network | Chain ID | Factory address |
 |---|---|---|
-| GenLayer Asimov Testnet | 4221 | `0x5c47F77BC204f30801533a274db8D7081BC76A08` |
-| GenLayer Studionet | 61999 | `0x72965A3118dA58bAe38C95078638dA3c86d317c3` |
+| GenLayer Asimov Testnet | 4221 | `0x410273D0755A5EE0255Cb8a9A40DDB93B545D3B9` |
+| GenLayer Studionet | 61999 | `0xa70CDdF1F3F8626BdBE4129b8E9B64007225EE60` |
 
 Switch between them from the network badge in the app's title bar. Studionet is a free, gasless
 environment good for trying the full flow without real funds.
@@ -119,6 +129,9 @@ task detail, stats) still work against either network without a connected wallet
 # Lint after any contract change
 uvx --from genvm-linter genvm-lint check contracts/task_verifier.py
 uvx --from genvm-linter genvm-lint check contracts/task_factory.py
+
+# Fast in-memory tests (state transitions, guards, escrow logic) - no server needed
+uvx --with genlayer-test pytest tests/direct/ -v
 
 # Re-embed task_verifier.py into task_factory.py after editing the former
 python3 contracts/generate_factory.py

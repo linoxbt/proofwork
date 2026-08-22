@@ -31,7 +31,7 @@ export interface ContractTaskState {
   worker: string;
   submission_url: string;
   submission_note: string;
-  status: 'open' | 'claimed' | 'submitted' | 'verified' | 'rejected' | 'disputed';
+  status: 'open' | 'claimed' | 'submitted' | 'verified' | 'rejected' | 'disputed' | 'cancelled' | 'expired';
   verification_result: string;
   dispute_count: number;
   dispute_reason: string;
@@ -230,6 +230,18 @@ export async function cancelTask(client: any, contractAddress: string): Promise<
   });
   const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
   assertTxSucceeded(receipt, 'Cancel');
+  return txHash;
+}
+
+export async function expireTask(client: any, contractAddress: string): Promise<string> {
+  const txHash = await client.writeContract({
+    address: contractAddress,
+    functionName: 'expire_task',
+    args: [],
+    value: 0,
+  });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });
+  assertTxSucceeded(receipt, 'Expire');
   return txHash;
 }
 

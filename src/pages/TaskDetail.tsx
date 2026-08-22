@@ -8,6 +8,17 @@ import { VerificationProgress } from '@/components/VerificationProgress';
 import { useWallet } from '@/hooks/useWallet';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import {
   claimTask,
@@ -15,6 +26,8 @@ import {
   requestVerification,
   disputeTask,
   releaseFunds,
+  cancelTask,
+  expireTask,
   getTaskState,
   getEscrowStatus,
   getReadOnlyClient,
@@ -24,11 +37,12 @@ import {
   type EscrowStatus,
 } from '@/lib/contract';
 import {
-  CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins, ScanSearch, Gavel, Lock, Unlock, EyeOff,
+  CheckCircle2, XCircle, ExternalLink, Cpu, Wallet, Send, HandCoins, ScanSearch, Gavel, Lock, Unlock, EyeOff, Ban, TimerOff,
 } from 'lucide-react';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 
 const RELEASE_WINDOW_SECONDS = 86400;
+const MAX_DISPUTES = 3;
 
 // Tasks deployed before the `deadline` field existed on-chain read back as
 // undefined/0, which produces an Invalid Date and throws in date-fns's
@@ -52,6 +66,8 @@ const TaskDetail = () => {
   const [verifying, setVerifying] = useState(false);
   const [disputing, setDisputing] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [expiring, setExpiring] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [task, setTask] = useState<ContractTaskState | null>(null);
   const [escrow, setEscrow] = useState<EscrowStatus | null>(null);
@@ -85,19 +101,29 @@ const TaskDetail = () => {
   const isWorker = !!(task && address && task.worker.toLowerCase() === address.toLowerCase());
   const isParty = isCreator || isWorker;
 
+  const now = Date.now() / 1000;
+  const isPastDeadline = !!task && now > task.deadline;
+  const disputesRemaining = task ? MAX_DISPUTES - task.dispute_count : MAX_DISPUTES;
+
   const canClaim = task?.status === 'open' && isConnected && !isCreator;
   const canSubmit = task?.status === 'claimed' && isConnected && isWorker;
   const canRequestVerification =
     (task?.status === 'submitted' || task?.status === 'disputed') && isConnected && isParty;
-  const canDispute = (task?.status === 'verified' || task?.status === 'rejected') && isConnected && isParty;
+  const canDispute =
+    (task?.status === 'verified' || task?.status === 'rejected') &&
+    isConnected && isParty && disputesRemaining > 0;
+  const canCancel = task?.status === 'open' && isConnected && isCreator;
+  const canExpire = (task?.status === 'open' || task?.status === 'claimed') && isConnected && isPastDeadline;
+  const isTerminalNoOutcome = task?.status === 'cancelled' || task?.status === 'expired';
 
   const releaseEligibleAt = task && task.verified_at > 0 ? task.verified_at + RELEASE_WINDOW_SECONDS : null;
-  const releaseEligible = releaseEligibleAt !== null && Date.now() / 1000 >= releaseEligibleAt;
+  const decidedReleaseEligible = releaseEligibleAt !== null && now >= releaseEligibleAt;
+  const releaseEligible = isTerminalNoOutcome || decidedReleaseEligible;
   const canRelease =
     isConnected &&
     escrow &&
     !escrow.released &&
-    (task?.status === 'verified' || task?.status === 'rejected') &&
+    (task?.status === 'verified' || task?.status === 'rejected' || isTerminalNoOutcome) &&
     releaseEligible;
 
   const category = task?.category === 'Other' ? task.category_other : task?.category;
@@ -185,6 +211,34 @@ const TaskDetail = () => {
     }
   }, [client, contractAddr, network, refresh]);
 
+  const handleCancel = useCallback(async () => {
+    if (!client || !contractAddr) return;
+    setCancelling(true);
+    try {
+      await cancelTask(client, contractAddr);
+      toast.success('Task cancelled. Escrow can now be refunded to you.');
+      await refresh();
+    } catch (err: any) {
+      toast.error(`Cancel failed: ${err.message}`);
+    } finally {
+      setCancelling(false);
+    }
+  }, [client, contractAddr, refresh]);
+
+  const handleExpire = useCallback(async () => {
+    if (!client || !contractAddr) return;
+    setExpiring(true);
+    try {
+      await expireTask(client, contractAddr);
+      toast.success('Task marked expired. Escrow can now be refunded to the creator.');
+      await refresh();
+    } catch (err: any) {
+      toast.error(`Expire failed: ${err.message}`);
+    } finally {
+      setExpiring(false);
+    }
+  }, [client, contractAddr, refresh]);
+
   if (loading) {
     return (
       <AppShell breadcrumb="Board / Loading…">
@@ -237,7 +291,12 @@ const TaskDetail = () => {
       )}
       {task.dispute_count > 0 && (
         <PanelSection title="Disputes">
-          <PanelRow label="Times disputed" value={task.dispute_count} />
+          <PanelRow label="Disputes used" value={`${task.dispute_count} of ${MAX_DISPUTES}`} />
+          {disputesRemaining <= 0 && (task.status === 'verified' || task.status === 'rejected') && (
+            <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+              Maximum disputes reached - this decision is final.
+            </p>
+          )}
           {task.dispute_reason && (
             <p className="text-xs text-muted-foreground leading-relaxed mt-1">"{task.dispute_reason}"</p>
           )}
@@ -265,6 +324,32 @@ const TaskDetail = () => {
               <ScanSearch className="h-3.5 w-3.5" />
               {verifying ? 'Verifying…' : 'Request Verification'}
             </button>
+          )}
+          {canCancel && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button disabled={cancelling} className="tool-btn border border-destructive/30 text-destructive hover:bg-destructive/10">
+                  <Ban className="h-3.5 w-3.5" />
+                  {cancelling ? 'Cancelling…' : 'Cancel Task'}
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancel this task?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This is irreversible. The task will be closed and the {task.reward_amount} GEN
+                    escrow will be refunded to you. This is only possible because nobody has claimed
+                    it yet.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep it open</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Cancel Task
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
           {!isConnected && (
             <button onClick={connect} className="tool-btn-primary">
@@ -305,6 +390,32 @@ const TaskDetail = () => {
             )}
           </div>
         </CodeCard>
+
+        {isTerminalNoOutcome && (
+          <CodeCard title={task.status === 'cancelled' ? 'Cancelled' : 'Expired'}>
+            <p className="text-sm text-foreground/85">
+              {task.status === 'cancelled'
+                ? 'This task was cancelled by its creator before anyone claimed it.'
+                : 'This task expired - its deadline passed before any work was submitted.'}
+            </p>
+          </CodeCard>
+        )}
+
+        {canExpire && (
+          <CodeCard title="Reclaim Escrow" variant="blue">
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                This task's deadline passed with {task.status === 'claimed' ? 'no evidence ever submitted' : 'nobody ever claiming it'}.
+                Anyone can mark it expired, which unlocks an immediate refund of the {task.reward_amount} GEN
+                escrow back to the creator.
+              </p>
+              <button onClick={handleExpire} disabled={expiring} className="tool-btn-primary h-8 w-full">
+                <TimerOff className="h-3.5 w-3.5" />
+                {expiring ? 'Marking expired…' : 'Mark Expired'}
+              </button>
+            </div>
+          </CodeCard>
+        )}
 
         {canSubmit && (
           <CodeCard title="Submit Work" variant="blue">
@@ -425,18 +536,21 @@ const TaskDetail = () => {
           </CodeCard>
         )}
 
-        {escrow && !escrow.released && (task.status === 'verified' || task.status === 'rejected') && (
+        {escrow && !escrow.released && (task.status === 'verified' || task.status === 'rejected' || isTerminalNoOutcome) && (
           <CodeCard title="Escrow" variant={releaseEligible ? 'default' : 'blue'}>
             <div className="flex items-start gap-3">
               {releaseEligible ? <Unlock className="h-5 w-5 text-success shrink-0 mt-0.5" /> : <Lock className="h-5 w-5 text-secondary shrink-0 mt-0.5" />}
               <div className="flex-1 space-y-2">
                 <p className="text-sm text-foreground/85">
-                  {escrow.lockedAmount} GEN is locked, payable to {task.status === 'verified' ? 'the worker' : 'the creator (refund)'}.
-                  {releaseEligible
-                    ? ' The 24h dispute window has passed - anyone can release it now.'
-                    : releaseEligibleAt
-                      ? ` Releases automatically ${formatDistanceToNowStrict(new Date(releaseEligibleAt * 1000), { addSuffix: true })} if not disputed.`
-                      : ''}
+                  {escrow.lockedAmount} GEN is locked, payable to{' '}
+                  {task.status === 'verified' ? 'the worker' : 'the creator (refund)'}.
+                  {isTerminalNoOutcome
+                    ? ' No dispute window applies here - anyone can release it now.'
+                    : releaseEligible
+                      ? ' The 24h dispute window has passed - anyone can release it now.'
+                      : releaseEligibleAt
+                        ? ` Releases automatically ${formatDistanceToNowStrict(new Date(releaseEligibleAt * 1000), { addSuffix: true })} if not disputed.`
+                        : ''}
                 </p>
                 {releaseEligible && isConnected && (
                   <button onClick={handleRelease} disabled={releasing} className="tool-btn-primary h-8">
@@ -455,7 +569,8 @@ const TaskDetail = () => {
               <p className="text-xs text-muted-foreground">
                 If you believe the AI verdict is wrong, explain why below. The task moves to "disputed" and
                 either party can then request a fresh re-verification with your reasoning as context. Disputing
-                also blocks the escrow release until the case is resolved.
+                also blocks the escrow release until the case is resolved. {disputesRemaining} of {MAX_DISPUTES}{' '}
+                disputes remaining on this task - once used up, the decision is final.
               </p>
               <Textarea
                 value={disputeReason}
