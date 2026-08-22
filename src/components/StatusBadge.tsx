@@ -1,13 +1,14 @@
 import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
-  status: 'open' | 'claimed' | 'submitted' | 'verified' | 'rejected' | 'disputed' | 'cancelled' | 'expired';
+  status: 'open' | 'claimed' | 'assigned' | 'submitted' | 'verified' | 'rejected' | 'disputed' | 'cancelled' | 'expired';
   className?: string;
 }
 
 const labels: Record<string, string> = {
   open: 'Open',
   claimed: 'Claimed',
+  assigned: 'Assigned',
   submitted: 'Pending Review',
   verified: '✓ Verified',
   rejected: '✗ Rejected',

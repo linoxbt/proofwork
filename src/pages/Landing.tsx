@@ -145,7 +145,7 @@ const Landing = () => {
             >
               <Github className="h-4 w-4" />
             </a>
-            <button onClick={() => navigate('/board')} className="tool-btn-primary h-8 px-3.5">
+            <button onClick={() => navigate('/launch')} className="tool-btn-primary h-8 px-3.5">
               Launch App <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </nav>
@@ -199,7 +199,7 @@ const Landing = () => {
               className="mt-8 flex flex-col sm:flex-row items-start gap-3"
             >
               <button
-                onClick={() => navigate('/board')}
+                onClick={() => navigate('/launch')}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
                            bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
               >
@@ -297,7 +297,7 @@ const Landing = () => {
               </p>
             </div>
             <button
-              onClick={() => navigate('/board')}
+              onClick={() => navigate('/launch')}
               className="shrink-0 inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
                          bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >

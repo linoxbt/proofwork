@@ -6,6 +6,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Landing from "./pages/Landing";
+import Launcher from "./pages/Launcher";
+import AgentsBoard from "./pages/AgentsBoard";
+import CreateAgentTask from "./pages/CreateAgentTask";
+import AgentTaskDetail from "./pages/AgentTaskDetail";
 import Board from "./pages/Index";
 import CreateTask from "./pages/CreateTask";
 import TaskDetail from "./pages/TaskDetail";
@@ -25,6 +29,10 @@ const App = () => (
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/launch" element={<Launcher />} />
+              <Route path="/agents" element={<AgentsBoard />} />
+              <Route path="/agents/create" element={<CreateAgentTask />} />
+              <Route path="/agents/task/:address" element={<AgentTaskDetail />} />
               <Route path="/board" element={<Board />} />
               <Route path="/tasks" element={<Navigate to="/board" replace />} />
               <Route path="/create" element={<CreateTask />} />

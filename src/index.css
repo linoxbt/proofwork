@@ -122,7 +122,8 @@
     @apply bg-primary/12 text-primary border border-primary/25;
   }
 
-  .status-claimed {
+  .status-claimed,
+  .status-assigned {
     @apply bg-accent/15 text-accent border border-accent/30;
   }
 

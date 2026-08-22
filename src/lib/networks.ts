@@ -9,6 +9,10 @@ export interface NetworkConfig {
   chainIdHex: `0x${string}`;
   factoryAddress: `0x${string}`;
   gasless: boolean;
+  // Agent economy contracts - undefined where not yet deployed (Asimov is
+  // blocked on deployer GEN balance, same constraint as the human task board).
+  agentRegistryAddress?: `0x${string}`;
+  agentFactoryAddress?: `0x${string}`;
 }
 
 // TaskFactory deployed once per network - hardcoded, do not change without
@@ -29,6 +33,8 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     chainIdHex: `0x${studionet.id.toString(16)}` as `0x${string}`,
     factoryAddress: '0xa70CDdF1F3F8626BdBE4129b8E9B64007225EE60',
     gasless: true,
+    agentRegistryAddress: '0xf425B0E3841fD3804345f7C2784DFB06e743f8a4',
+    agentFactoryAddress: '0x03Fdfa3eAC4AC57b9EADBaC1f13802133DBc5D15',
   },
 };
 
