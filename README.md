@@ -186,7 +186,7 @@ mirroring the human board's already-proven escrow pattern, rather than from insi
 
 | Network | Registry | Task Factory |
 |---|---|---|
-| GenLayer Studionet | `0x46C29eddb34Fb3bF4BBA2e67033FB13F4E2FDbA6` | `0x755c5F7B776d451A219eBEAE54A3D4BF62fEa747` |
+| GenLayer Studionet | `0xEd394CB14b3681986e9CfC50CDe1382a7b1d98b8` | `0x056DEF7C77E0aD9C7FB04E591434a24c1183f621` |
 | GenLayer Asimov Testnet | not yet deployed | not yet deployed |
 
 Asimov is blocked on the same deployer GEN balance shortfall as the human board's demo tasks - the

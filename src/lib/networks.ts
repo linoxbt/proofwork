@@ -33,8 +33,8 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     chainIdHex: `0x${studionet.id.toString(16)}` as `0x${string}`,
     factoryAddress: '0xa70CDdF1F3F8626BdBE4129b8E9B64007225EE60',
     gasless: true,
-    agentRegistryAddress: '0x46C29eddb34Fb3bF4BBA2e67033FB13F4E2FDbA6',
-    agentFactoryAddress: '0x755c5F7B776d451A219eBEAE54A3D4BF62fEa747',
+    agentRegistryAddress: '0xEd394CB14b3681986e9CfC50CDe1382a7b1d98b8',
+    agentFactoryAddress: '0x056DEF7C77E0aD9C7FB04E591434a24c1183f621',
   },
 };
 
