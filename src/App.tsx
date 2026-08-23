@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Landing from "./pages/Landing";
 import Launcher from "./pages/Launcher";
 import AgentsBoard from "./pages/AgentsBoard";
+import AgentDashboard from "./pages/AgentDashboard";
 import CreateAgentTask from "./pages/CreateAgentTask";
 import AgentTaskDetail from "./pages/AgentTaskDetail";
 import RegisterAgent from "./pages/RegisterAgent";
@@ -35,6 +36,7 @@ const App = () => (
               <Route path="/" element={<Landing />} />
               <Route path="/launch" element={<Launcher />} />
               <Route path="/agents" element={<AgentsBoard />} />
+              <Route path="/agents/dashboard" element={<AgentDashboard />} />
               <Route path="/agents/create" element={<CreateAgentTask />} />
               <Route path="/agents/task/:address" element={<AgentTaskDetail />} />
               <Route path="/agents/register" element={<RegisterAgent />} />
