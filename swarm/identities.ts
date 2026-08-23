@@ -21,10 +21,17 @@ export interface Identity extends StoredIdentity {
 // instead of abandoning a funded/registered address. Nothing here ever leaves
 // this file; unlike Polaris's Circle-custody swarm, GenLayer accounts are plain
 // local keys, so this file *is* the wallet.
+//
+// On a host with no writable local disk to persist to (e.g. Railway), set
+// SWARM_IDENTITIES_JSON to the same array shape this file stores - the keys
+// then live only in that platform's secret store, never written to disk here.
 export function loadOrCreateIdentities(personas: Persona[]): Identity[] {
-  const stored: StoredIdentity[] = existsSync(IDENTITIES_FILE)
-    ? JSON.parse(readFileSync(IDENTITIES_FILE, 'utf8'))
-    : [];
+  const envSource = process.env.SWARM_IDENTITIES_JSON;
+  const stored: StoredIdentity[] = envSource
+    ? JSON.parse(envSource)
+    : existsSync(IDENTITIES_FILE)
+      ? JSON.parse(readFileSync(IDENTITIES_FILE, 'utf8'))
+      : [];
   const byName = new Map(stored.map((s) => [s.name, s]));
 
   const result: Identity[] = personas.map((persona) => {
@@ -37,15 +44,17 @@ export function loadOrCreateIdentities(personas: Persona[]): Identity[] {
     return { ...entry, persona };
   });
 
-  writeFileSync(
-    IDENTITIES_FILE,
-    JSON.stringify(
-      result.map(({ name, privateKey, address }) => ({ name, privateKey, address })),
-      null,
-      2,
-    ),
-    { mode: 0o600 },
-  );
+  if (!envSource) {
+    writeFileSync(
+      IDENTITIES_FILE,
+      JSON.stringify(
+        result.map(({ name, privateKey, address }) => ({ name, privateKey, address })),
+        null,
+        2,
+      ),
+      { mode: 0o600 },
+    );
+  }
 
   return result;
 }

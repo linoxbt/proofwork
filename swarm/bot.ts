@@ -28,6 +28,7 @@ import { PERSONAS, MIN_STAKE_GEN, FUND_TARGET_GEN, type Persona } from './person
 import { loadOrCreateIdentities, type Identity } from './identities';
 import { buildClient, buildReadOnlyClient, getBalanceWei, fmtGen, NETWORK } from './client';
 import { produceDeliverable } from './deliverable';
+import { startStatusServer, type SwarmStatus } from './server';
 
 const POLL_INTERVAL_MS = 15_000;
 const MAX_BIDS = 3; // per-persona open-bid cap, mirrors Polaris's SWARM_MAX_BIDS
@@ -213,11 +214,15 @@ async function runCycle(identities: RunningIdentity[], readClient: any, closerCl
     }
   }
 
-  // Settlement sweep: release funds and advance series for our own terminal tasks.
-  const myAddresses = new Set(identities.map((i) => i.address.toLowerCase()));
+  // Settlement sweep: this is permissionless housekeeping (release_funds,
+  // advance_recurring_series), so it runs for every terminal task and every
+  // due series on the platform - not just tasks assigned to the swarm's own
+  // 5 identities. Any registered agent (a real user's wallet included) gets
+  // the same autonomous settlement, even though only the swarm's own
+  // identities can autonomously bid/work (that needs the agent's private key,
+  // which the platform never holds for a user's own wallet).
   for (const [addr, state] of taskStates) {
     if (!TERMINAL.has(state.status)) continue;
-    if (!state.assigned_agent || !myAddresses.has(state.assigned_agent.toLowerCase())) continue;
     const escrow = await getAgentTaskEscrowStatus(NETWORK, addr);
     if (escrow.released) continue;
     try {
@@ -229,7 +234,6 @@ async function runCycle(identities: RunningIdentity[], readClient: any, closerCl
   }
   for (const [sid, series] of seriesStates) {
     if (!series.active || !series.awarded) continue;
-    if (!series.committed_agent || !myAddresses.has(series.committed_agent.toLowerCase())) continue;
     if (now < series.next_advance_at) continue;
     const current = latestTaskForSeries(sid, taskStates);
     if (!current) continue;
@@ -329,12 +333,38 @@ async function main() {
   const readClient = buildReadOnlyClient();
   const closerClient = identities[0].client; // any client works for permissionless calls
 
+  const startedAt = new Date().toISOString();
+  let lastCycleAt: string | null = null;
+  let lastCycleError: string | null = null;
+  let cycleCount = 0;
+
+  startStatusServer((): SwarmStatus => ({
+    network: NETWORK,
+    startedAt,
+    lastCycleAt,
+    lastCycleError,
+    cycleCount,
+    identities: identities.map((id) => ({
+      name: id.persona.name,
+      address: id.address,
+      registered: id.info?.registered ?? false,
+      active: id.info?.active ?? false,
+      reputation: id.info?.reputation ?? 0,
+      stake: id.info?.stake ?? 0,
+      activeTasks: id.info?.active_tasks ?? 0,
+    })),
+  }));
+
   while (true) {
     try {
       await runCycle(identities, readClient, closerClient);
+      lastCycleError = null;
     } catch (e: any) {
+      lastCycleError = e.message;
       console.error('cycle error:', e.message);
     }
+    lastCycleAt = new Date().toISOString();
+    cycleCount += 1;
     await sleep(POLL_INTERVAL_MS);
   }
 }
