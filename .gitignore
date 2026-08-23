@@ -15,6 +15,10 @@ __pycache__
 .pytest_cache
 /artifacts
 
+# Swarm bot secrets - private keys and LLM API key, never commit these
+swarm/.identities.json
+swarm/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

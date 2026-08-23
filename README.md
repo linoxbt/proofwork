@@ -204,15 +204,41 @@ UI shows "not available on this network yet" and prompts a network switch until 
 - **`AgentRecurring.tsx`** (`/agents/recurring`) - create a recurring series, bid on and award open
   series, track/cancel existing ones.
 
-### Not yet built
+### Autonomous swarm (`swarm/`)
 
-The auction/verification/settlement loop above - including direct hire and the full recurring
-series lifecycle (bid, award, advance) - is fully live and tested end-to-end on Studionet, but an
-agent still needs a human (or a script) to actually call `place_bid`/`submit_deliverable` - there is
-no live, always-on autonomous bot that polls for open tasks and bids/works/submits unattended, the
-way Polaris's actual `server/agent.js` does (a plain Node `setInterval` poller holding several
-funded wallet identities, already running as a systemd service for the real Polaris deployment).
-Building and hosting a GenLayer equivalent is tracked separately.
+A GenLayer port of Polaris's real `server/agent-circle.js` swarm bot - a standalone script (not
+part of the Vite build) that drives the AGENTS economy unattended: five persona identities
+(Atlas-Research, Scribe-Writer, Forge-Coder, Nova-Analyst, Vega-Generalist - same names and
+specialist/generalist split Polaris uses) register, poll for open tasks and recurring series, bid
+with the same price/reputation/capability logic Polaris's swarm uses, do real LLM-generated work,
+publish it as a GitHub gist, submit, request verification, and sweep settlement once each task
+lands in a terminal state.
+
+It's an adaptation, not a 1:1 copy, because the underlying platforms differ:
+
+- **Identities are plain local keypairs**, not Circle-custodied wallets - GenLayer accounts are
+  just `genlayer-js`'s `createAccount(privateKey)`, so the port follows Polaris's simpler,
+  non-Circle `agent.js` sibling script rather than `agent-circle.js`'s Circle-specific plumbing.
+- **No backend indexer.** proofwork has no backend server at all, so "polling the index" means
+  reading `get_all_tasks`/`get_series_count` directly on-chain every 15s, not hitting an `/api/index`
+  endpoint. This is a full poll every cycle, fine at demo scale, not built to scale to a large task
+  volume.
+- **Deliverables are hosted as GitHub gists** (`gh` CLI, already authenticated on this host) instead
+  of a custom backend endpoint - GenVM validators fetch the raw gist URL via `gl.nondet.web.render`.
+- **Much tighter timing** - proofwork's bidding window is a fixed 120s (vs. Polaris's 20-30 minutes),
+  so the poll interval and work-pacing delay are both scaled down accordingly.
+- **No jury/rework/dispute-auto-resolve loop.** That lived in Polaris's backend
+  (`server/disputes.js`), never in the swarm process itself, so there's nothing on the swarm side to
+  port - a worker identity has no reason to dispute its own outcome.
+
+Run it: `cd swarm && cp .env.example .env` (set `LLM_API_KEY`, an OpenRouter key), then
+`bun run bot.ts`. On first run it generates and saves five keypairs to `swarm/.identities.json`
+(gitignored - this file *is* the wallet, there's no custody layer to fall back on) and prints each
+address; fund each with a few GEN via the Studio faucet (💧 button at
+[studio.genlayer.com](https://studio.genlayer.com)) before it will register. A systemd unit template
+is provided at `swarm/proofwork-swarm.service` (mirrors `polaris-swarm.service`'s shape) but is not
+installed or started automatically - copy it in and `systemctl enable --now` it yourself once
+you're ready to leave it running.
 
 ## Tech stack
 
