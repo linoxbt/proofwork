@@ -33,7 +33,14 @@ import { buildClient, buildReadOnlyClient, getBalanceWei, fmtGen, NETWORK } from
 import { produceDeliverable } from './deliverable';
 import { startStatusServer, type SwarmStatus, type PlatformIndex } from './server';
 
-const POLL_INTERVAL_MS = 15_000;
+// Studionet rate-limits to 500 req/hr per IP. Even after deduping redundant
+// calls, a zero-task cycle still costs ~8 calls (task/series counts, 5
+// identity refreshes, agent list) - at 30s that's already ~960/hr, over
+// budget before any real task volume. 60s keeps steady-state comfortably
+// under the limit; this still won't scale indefinitely as task count grows
+// (each open task adds ~3 more calls/cycle), matching the documented
+// "fine at demo scale" tradeoff for the full-poll approach.
+const POLL_INTERVAL_MS = 60_000;
 const MAX_BIDS = 3; // per-persona open-bid cap, mirrors Polaris's SWARM_MAX_BIDS
 const MAX_INFLIGHT = 1; // per-persona concurrent work capacity
 const REPUTATION_FLOOR = 70; // mirrors AgentTask.REPUTATION_FLOOR
@@ -176,15 +183,22 @@ async function delegate(id: RunningIdentity, addr: string, state: AgentTaskState
 // single-flight pattern (see server.ts), no event replay needed.
 async function buildIndex(
   readClient: any,
+  identities: RunningIdentity[],
   taskStates: [string, AgentTaskState][],
   seriesStates: [number, RecurringSeries][],
+  escrowByTask: Map<string, { lockedAmount: number; released: boolean }>,
 ): Promise<PlatformIndex> {
   const now = Math.floor(Date.now() / 1000);
 
+  // Reuse the registration pass's getAgent results for the swarm's own
+  // identities instead of re-fetching them here - this was silently doubling
+  // RPC usage every cycle and is most of why Studionet's 500req/hr limit was
+  // getting tripped even with zero tasks posted.
+  const knownByAddress = new Map(identities.map((id) => [id.address.toLowerCase(), id]));
   const agentAddresses = await getAllAgents(NETWORK);
   const agents = await Promise.all(
     agentAddresses.map(async (address) => {
-      const info = await getAgent(NETWORK, address);
+      const info = knownByAddress.get(address.toLowerCase())?.info ?? (await getAgent(NETWORK, address));
       return {
         address,
         name: info.name,
@@ -200,10 +214,8 @@ async function buildIndex(
 
   const tasks = await Promise.all(
     taskStates.map(async ([address, state]) => {
-      const [escrow, rawBids] = await Promise.all([
-        getAgentTaskEscrowStatus(NETWORK, address),
-        getAgentTaskBids(readClient, address),
-      ]);
+      const escrow = escrowByTask.get(address)!;
+      const rawBids = await getAgentTaskBids(readClient, address);
       const releaseEligible =
         !escrow.released &&
         TERMINAL.has(state.status) &&
@@ -292,6 +304,15 @@ async function runCycle(
 
   await Promise.all(taskAddrs.filter((a) => !seriesMembershipCache.has(a)).map((a) => seriesIdForTask(a)));
 
+  // Escrow status per task, fetched once and reused by both the settlement
+  // sweep below and buildIndex - was previously fetched twice per task.
+  const escrowByTask = new Map<string, { lockedAmount: number; released: boolean }>();
+  await Promise.all(
+    taskAddrs.map(async (addr) => {
+      escrowByTask.set(addr, await getAgentTaskEscrowStatus(NETWORK, addr));
+    }),
+  );
+
   // Registration pass - refresh every identity's on-chain state for this cycle.
   for (const id of identities) {
     id.info = await getAgent(NETWORK, id.address);
@@ -336,7 +357,7 @@ async function runCycle(
   // which the platform never holds for a user's own wallet).
   for (const [addr, state] of taskStates) {
     if (!TERMINAL.has(state.status)) continue;
-    const escrow = await getAgentTaskEscrowStatus(NETWORK, addr);
+    const escrow = escrowByTask.get(addr)!;
     if (escrow.released) continue;
     try {
       await releaseAgentTaskFunds(closerClient, NETWORK, addr);
@@ -352,7 +373,7 @@ async function runCycle(
     if (!current) continue;
     const [addr, state] = current;
     if (!TERMINAL.has(state.status)) continue;
-    const escrow = await getAgentTaskEscrowStatus(NETWORK, addr);
+    const escrow = escrowByTask.get(addr)!;
     if (!escrow.released) continue;
     try {
       await advanceRecurringSeries(closerClient, NETWORK, addr);
@@ -426,7 +447,7 @@ async function runCycle(
     }
   }
 
-  return buildIndex(readClient, taskStates, seriesStates);
+  return buildIndex(readClient, identities, taskStates, seriesStates, escrowByTask);
 }
 
 async function main() {

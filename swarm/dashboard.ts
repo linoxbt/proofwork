@@ -173,7 +173,7 @@ export function renderDashboard(index: PlatformIndex | null, status: SwarmStatus
     network: ${esc(status.network)} &middot;
     started ${esc(status.startedAt)} &middot;
     cycle #${status.cycleCount}, last ${timeAgo(status.lastCycleAt ? new Date(status.lastCycleAt).getTime() : null)}
-    ${status.lastCycleError ? `&middot; <span class="error">cycle error: ${esc(status.lastCycleError.split('\n')[0])}</span>` : ''}
+    ${status.lastCycleError ? `&middot; <span class="error">cycle error: ${esc(status.lastCycleError.replace(/\s+/g, ' ').trim().slice(0, 200))}</span>` : ''}
     &middot; refreshes every 15s &middot;
     <a href="/api/index">/api/index</a> &middot; <a href="/status">/status</a>
   </div>
