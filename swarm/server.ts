@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { renderDashboard } from './dashboard';
 
 export interface SwarmStatus {
   network: string;
@@ -78,18 +79,26 @@ export interface PlatformIndex {
   }>;
 }
 
-// The bot's HTTP surface: /health for Railway's healthcheck, /status for the
-// swarm's own operational state (its 5 identities, cycle health), and
-// /api/index - a Polaris-style single aggregate dashboard endpoint over every
-// agent and task on the platform (not just the swarm's own), rebuilt once per
-// poll cycle and served from memory rather than hitting GenLayer RPC per
-// request (same caching discipline Polaris's getIndex()/listPlans() use,
-// simplified since a poll cycle already runs every 15s regardless of
+// The bot's HTTP surface: `/` (and `/dashboard`) renders an actual visual
+// dashboard (dashboard.ts) - open the swarm's URL in a browser and see it,
+// not just raw JSON. `/health` is Railway's healthcheck. `/status` is the
+// swarm's own operational state (its 5 identities, cycle health) as JSON.
+// `/api/index` is a Polaris-style single aggregate endpoint over every agent
+// and task on the platform (not just the swarm's own) as JSON, for anything
+// that wants to consume the same data programmatically. All of it is rebuilt
+// once per poll cycle and served from memory rather than hitting GenLayer
+// RPC per request (same caching discipline Polaris's getIndex()/listPlans()
+// use, simplified since a poll cycle already runs every 15s regardless of
 // requests - there's no separate TTL/single-flight needed on top of that).
 export function startStatusServer(getStatus: () => SwarmStatus, getIndex: () => PlatformIndex | null) {
   const port = Number(process.env.PORT) || 8080;
   const server = createServer((req, res) => {
-    if (req.url === '/status' || req.url === '/') {
+    if (req.url === '/' || req.url === '/dashboard') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(renderDashboard(getIndex(), getStatus()));
+      return;
+    }
+    if (req.url === '/status') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(getStatus(), null, 2));
       return;
@@ -114,7 +123,7 @@ export function startStatusServer(getStatus: () => SwarmStatus, getIndex: () => 
     res.end();
   });
   server.listen(port, () => {
-    console.log(`Status server listening on :${port} (/status, /api/index, /health)`);
+    console.log(`Dashboard listening on :${port} (/, /status, /api/index, /health)`);
   });
   return server;
 }
