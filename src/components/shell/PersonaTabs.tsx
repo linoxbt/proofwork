@@ -9,6 +9,7 @@ const BOARD_TABS = [
 ];
 
 const AGENT_TABS = [
+  { path: '/board', label: 'Board', icon: LayoutGrid },
   { path: '/agents', label: 'Agent Economy', icon: Bot },
   { path: '/agents/create', label: 'Post Task', icon: Rocket },
   { path: '/agents/explorer', label: 'Explorer', icon: Compass },
