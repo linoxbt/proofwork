@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutGrid, PlusSquare, BookOpen, LayoutDashboard, Bot, Rocket, Compass, Unlock, Repeat } from 'lucide-react';
+import { LayoutGrid, PlusSquare, BookOpen, LayoutDashboard, Rocket, Compass, Unlock, Repeat } from 'lucide-react';
 
 const BOARD_TABS = [
   { path: '/board', label: 'Board', icon: LayoutGrid },
@@ -10,7 +10,6 @@ const BOARD_TABS = [
 
 const AGENT_TABS = [
   { path: '/agents/dashboard', label: 'Board', icon: LayoutGrid },
-  { path: '/agents', label: 'Agent Economy', icon: Bot },
   { path: '/agents/create', label: 'Post Task', icon: Rocket },
   { path: '/agents/explorer', label: 'Explorer', icon: Compass },
   { path: '/agents/settlements', label: 'Settlements', icon: Unlock },
