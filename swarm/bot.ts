@@ -5,6 +5,7 @@
 import {
   registerAgent,
   getAgent,
+  getAllAgents,
   getAllAgentTaskAddresses,
   getAgentTaskState,
   getAgentTaskEscrowStatus,
@@ -28,7 +29,7 @@ import { PERSONAS, MIN_STAKE_GEN, FUND_TARGET_GEN, type Persona } from './person
 import { loadOrCreateIdentities, type Identity } from './identities';
 import { buildClient, buildReadOnlyClient, getBalanceWei, fmtGen, NETWORK } from './client';
 import { produceDeliverable } from './deliverable';
-import { startStatusServer, type SwarmStatus } from './server';
+import { startStatusServer, type SwarmStatus, type PlatformIndex } from './server';
 
 const POLL_INTERVAL_MS = 15_000;
 const MAX_BIDS = 3; // per-persona open-bid cap, mirrors Polaris's SWARM_MAX_BIDS
@@ -164,7 +165,94 @@ async function delegate(id: RunningIdentity, addr: string, state: AgentTaskState
   await releaseAgentTaskFunds(id.client, NETWORK, subAddr).catch(() => {});
 }
 
-async function runCycle(identities: RunningIdentity[], readClient: any, closerClient: any) {
+// Mirrors Polaris's GET /api/index (server/indexer.js) - a single aggregate
+// dashboard endpoint over agents + tasks + recurring series, rather than
+// granular per-resource REST routes. Polaris builds this by replaying local
+// on-chain event-log caches; proofwork's GenLayer contracts already hold
+// canonical current state, so this is a direct read + the same TTL-cached
+// single-flight pattern (see server.ts), no event replay needed.
+async function buildIndex(
+  taskStates: [string, AgentTaskState][],
+  seriesStates: [number, RecurringSeries][],
+): Promise<PlatformIndex> {
+  const agentAddresses = await getAllAgents(NETWORK);
+  const agents = await Promise.all(
+    agentAddresses.map(async (address) => {
+      const info = await getAgent(NETWORK, address);
+      return {
+        address,
+        name: info.name,
+        capabilities: info.capabilities.split(',').map((c) => c.trim()).filter(Boolean),
+        stakeGen: info.stake,
+        reputation: info.reputation,
+        activeTasks: info.active_tasks,
+        online: info.active,
+        registered: info.registered,
+      };
+    }),
+  );
+
+  const tasks = await Promise.all(
+    taskStates.map(async ([address, state]) => {
+      const escrow = await getAgentTaskEscrowStatus(NETWORK, address);
+      return {
+        address,
+        ref: address.slice(2, 10).toUpperCase(),
+        requester: state.requester,
+        title: state.title,
+        description: state.description,
+        criteria: state.criteria,
+        capabilityRequired: state.capability_required,
+        budgetGen: state.budget,
+        deadlineMs: state.deadline * 1000,
+        biddingDeadlineMs: state.bidding_deadline * 1000,
+        bidCount: state.bid_count,
+        status: state.status,
+        assignedAgent: state.assigned_agent || null,
+        assignedPriceGen: state.assigned_price,
+        createdAtMs: state.created_at * 1000,
+        verifiedAtMs: state.verified_at ? state.verified_at * 1000 : null,
+        disputeCount: state.dispute_count,
+        escrowedGen: escrow.lockedAmount,
+        escrowReleased: escrow.released,
+      };
+    }),
+  );
+  tasks.sort((a, b) => b.createdAtMs - a.createdAtMs);
+
+  const series = seriesStates.map(([id, s]) => ({
+    id,
+    requester: s.requester,
+    title: s.title,
+    capabilityRequired: s.capability_required,
+    budgetPerOccurrenceGen: s.budget_per_occurrence,
+    remaining: s.remaining,
+    active: s.active,
+    awarded: s.awarded,
+    biddingDeadlineMs: s.bidding_deadline * 1000,
+    bidCount: s.bid_count,
+    committedAgent: s.committed_agent || null,
+    committedPriceGen: s.committed_price,
+  }));
+
+  const totals = {
+    totalTasks: tasks.length,
+    openTasks: tasks.filter((t) => t.status === 'open').length,
+    totalAgents: agents.length,
+    activeAgents: agents.filter((a) => a.online).length,
+    totalSeries: series.length,
+    totalGenSettled: tasks.filter((t) => t.escrowReleased).reduce((sum, t) => sum + t.escrowedGen, 0),
+    totalGenInEscrow: tasks.filter((t) => !t.escrowReleased).reduce((sum, t) => sum + t.escrowedGen, 0),
+  };
+
+  return { network: NETWORK, indexedAtMs: Date.now(), totals, agents, tasks, series };
+}
+
+async function runCycle(
+  identities: RunningIdentity[],
+  readClient: any,
+  closerClient: any,
+): Promise<PlatformIndex> {
   const now = Math.floor(Date.now() / 1000);
 
   const [taskAddrs, seriesCount] = await Promise.all([getAllAgentTaskAddresses(NETWORK), getSeriesCount(NETWORK)]);
@@ -312,6 +400,8 @@ async function runCycle(identities: RunningIdentity[], readClient: any, closerCl
       }
     }
   }
+
+  return buildIndex(taskStates, seriesStates);
 }
 
 async function main() {
@@ -337,27 +427,31 @@ async function main() {
   let lastCycleAt: string | null = null;
   let lastCycleError: string | null = null;
   let cycleCount = 0;
+  let latestIndex: PlatformIndex | null = null;
 
-  startStatusServer((): SwarmStatus => ({
-    network: NETWORK,
-    startedAt,
-    lastCycleAt,
-    lastCycleError,
-    cycleCount,
-    identities: identities.map((id) => ({
-      name: id.persona.name,
-      address: id.address,
-      registered: id.info?.registered ?? false,
-      active: id.info?.active ?? false,
-      reputation: id.info?.reputation ?? 0,
-      stake: id.info?.stake ?? 0,
-      activeTasks: id.info?.active_tasks ?? 0,
-    })),
-  }));
+  startStatusServer(
+    (): SwarmStatus => ({
+      network: NETWORK,
+      startedAt,
+      lastCycleAt,
+      lastCycleError,
+      cycleCount,
+      identities: identities.map((id) => ({
+        name: id.persona.name,
+        address: id.address,
+        registered: id.info?.registered ?? false,
+        active: id.info?.active ?? false,
+        reputation: id.info?.reputation ?? 0,
+        stake: id.info?.stake ?? 0,
+        activeTasks: id.info?.active_tasks ?? 0,
+      })),
+    }),
+    () => latestIndex,
+  );
 
   while (true) {
     try {
-      await runCycle(identities, readClient, closerClient);
+      latestIndex = await runCycle(identities, readClient, closerClient);
       lastCycleError = null;
     } catch (e: any) {
       lastCycleError = e.message;

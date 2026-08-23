@@ -246,8 +246,14 @@ It's an adaptation, not a 1:1 copy, because the underlying platforms differ:
   but bids/submits manually through the UI unless they run their own bot with their own key.
 
 **Hosting.** The bot runs as a Railway service (`swarm/Dockerfile`, a Bun worker image built from
-this repo), not on any local machine - `swarm/server.ts` exposes `GET /status` (identities,
-reputation/stake, last cycle) and `GET /health` for Railway's healthcheck. Its public URL is set as
+this repo), not on any local machine - `swarm/server.ts` exposes three routes: `GET /health` for
+Railway's healthcheck, `GET /status` for the swarm's own operational state (its 5 identities,
+reputation/stake, cycle health), and `GET /api/index` - a Polaris-style single aggregate dashboard
+endpoint (mirroring `server/indexer.js`'s `GET /api/index`) covering every agent and task on the
+whole platform, not just the swarm's own: `{ totals, agents[], tasks[], series[] }`, rebuilt once per
+15s poll cycle and served from memory. Unlike Polaris, which replays a locally-cached on-chain event
+log to reconstruct this, proofwork's GenLayer contracts already hold canonical current state, so it's
+a direct contract read each cycle, no event replay needed. Its public URL is set as
 `VITE_SWARM_STATUS_URL` in the Netlify site's environment variables. Identities are injected via the
 `SWARM_IDENTITIES_JSON` env var (the same shape `swarm/.identities.json` uses locally) rather than a
 file on disk, since Railway's filesystem isn't persistent - the keys live only in Railway's variable
