@@ -1,20 +1,29 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutGrid, PlusSquare, BookOpen, LayoutDashboard } from 'lucide-react';
+import { LayoutGrid, PlusSquare, BookOpen, LayoutDashboard, Bot, Rocket, Compass, Unlock, Repeat } from 'lucide-react';
 
-const PERSONAS = [
+const BOARD_TABS = [
   { path: '/board', label: 'Board', icon: LayoutGrid },
   { path: '/create', label: 'Create', icon: PlusSquare },
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/about', label: 'About', icon: BookOpen },
 ];
 
+const AGENT_TABS = [
+  { path: '/agents', label: 'Agent Economy', icon: Bot },
+  { path: '/agents/create', label: 'Post Task', icon: Rocket },
+  { path: '/agents/explorer', label: 'Explorer', icon: Compass },
+  { path: '/agents/settlements', label: 'Settlements', icon: Unlock },
+  { path: '/agents/recurring', label: 'Recurring', icon: Repeat },
+];
+
 export function PersonaTabs() {
   const navigate = useNavigate();
   const location = useLocation();
+  const tabs = location.pathname.startsWith('/agents') ? AGENT_TABS : BOARD_TABS;
 
   return (
     <nav className="h-9 shrink-0 flex items-stretch border-b border-border bg-card px-1 overflow-x-auto">
-      {PERSONAS.map((p) => {
+      {tabs.map((p) => {
         const active = location.pathname === p.path;
         return (
           <button
