@@ -120,7 +120,8 @@ const AgentExplorer = () => {
                     key={a.address}
                     className={`flex items-center gap-3 sm:gap-4 px-3 py-2.5 bg-card ${i !== 0 ? 'border-t border-border' : ''}`}
                   >
-                    <span className="font-mono text-xs text-foreground/85 shrink-0">
+                    <span className="text-xs font-medium text-foreground shrink-0">{a.name || 'Unnamed'}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground shrink-0 hidden sm:inline">
                       {a.address.slice(0, 6)}…{a.address.slice(-4)}
                     </span>
                     <span className="flex-1 min-w-0 text-xs text-muted-foreground truncate">{a.capabilities}</span>

@@ -14,6 +14,7 @@ const RegisterAgent = () => {
   const navigate = useNavigate();
   const { address, client, isConnected, connect, network } = useWallet();
   const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
+  const [name, setName] = useState('');
   const [capabilities, setCapabilities] = useState('');
   const [stake, setStake] = useState('1');
   const [restakeAmount, setRestakeAmount] = useState('1');
@@ -46,7 +47,7 @@ const RegisterAgent = () => {
   }, [refresh]);
 
   const handleRegister = useCallback(async () => {
-    if (!client || !capabilities.trim()) return;
+    if (!client || !name.trim() || !capabilities.trim()) return;
     const stakeAmount = parseFloat(stake) || 0;
     if (stakeAmount < 1) {
       toast.error('Stake must be at least 1 GEN');
@@ -54,8 +55,9 @@ const RegisterAgent = () => {
     }
     setRegistering(true);
     try {
-      await registerAgent(client, network, capabilities, stakeAmount);
+      await registerAgent(client, network, name, capabilities, stakeAmount);
       toast.success('Registered as an agent!');
+      setName('');
       setCapabilities('');
       await refresh();
     } catch (err: any) {
@@ -63,7 +65,7 @@ const RegisterAgent = () => {
     } finally {
       setRegistering(false);
     }
-  }, [client, network, capabilities, stake, refresh]);
+  }, [client, network, name, capabilities, stake, refresh]);
 
   const handleGoOffline = useCallback(async () => {
     if (!client) return;
@@ -110,6 +112,7 @@ const RegisterAgent = () => {
 
   const panel = agentInfo?.active ? (
     <PanelSection title="Your Agent" defaultOpen>
+      <PanelRow label="Name" value={agentInfo.name} />
       <PanelRow label="Capabilities" value={agentInfo.capabilities} />
       <PanelRow label="Reputation" value={agentInfo.reputation} />
       <PanelRow label="Stake" value={`${agentInfo.stake} GEN`} />
@@ -156,7 +159,7 @@ const RegisterAgent = () => {
           <p className="text-muted-foreground text-sm text-center py-8">Loading…</p>
         ) : agentInfo?.active ? (
           <>
-            <CodeCard title="You are a registered agent (online)">
+            <CodeCard title={`You are a registered agent (online) - ${agentInfo.name}`}>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded bg-muted/40 p-3">
@@ -196,7 +199,7 @@ const RegisterAgent = () => {
           </>
         ) : agentInfo?.registered ? (
           <>
-            <CodeCard title="Offline">
+            <CodeCard title={`Offline - ${agentInfo.name}`}>
               <div className="space-y-3">
                 <p className="text-sm text-foreground/85">
                   <span className="font-medium">Capabilities:</span> {agentInfo.capabilities}
@@ -254,6 +257,16 @@ const RegisterAgent = () => {
                 </div>
               </div>
               <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Name</label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Atlas-Research"
+                  className="bg-background border-border text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">A human-readable name - shown instead of your raw address in the Explorer and task history.</p>
+              </div>
+              <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Capabilities</label>
                 <Input
                   value={capabilities}
@@ -276,7 +289,7 @@ const RegisterAgent = () => {
               </div>
               <button
                 onClick={handleRegister}
-                disabled={registering || !capabilities.trim()}
+                disabled={registering || !name.trim() || !capabilities.trim()}
                 className="tool-btn-primary h-8 w-full"
               >
                 <ShieldCheck className="h-3.5 w-3.5" />

@@ -74,6 +74,7 @@ const AgentTaskDetail = () => {
   const [bids, setBids] = useState<Bid[]>([]);
   const [escrow, setEscrow] = useState<{ lockedAmount: number; released: boolean } | null>(null);
   const [myAgentActive, setMyAgentActive] = useState(false);
+  const [assignedAgentName, setAssignedAgentName] = useState('');
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -88,6 +89,16 @@ const AgentTaskDetail = () => {
       setTask(state);
       setBids(bidList);
       setEscrow(escrowStatus);
+      if (state.assigned_agent) {
+        try {
+          const assigned = await getAgent(network, state.assigned_agent);
+          setAssignedAgentName(assigned.name);
+        } catch {
+          setAssignedAgentName('');
+        }
+      } else {
+        setAssignedAgentName('');
+      }
       if (address) {
         try {
           const info = await getAgent(network, address);
@@ -286,7 +297,14 @@ const AgentTaskDetail = () => {
         <PanelRow label="Bidding closes" value={formatDeadline(task.bidding_deadline)} />
         <PanelRow label="Deadline" value={formatDeadline(task.deadline)} />
         <PanelRow label="Requester" value={`${task.requester.slice(0, 6)}…${task.requester.slice(-4)}`} />
-        <PanelRow label="Assigned agent" value={task.assigned_agent ? `${task.assigned_agent.slice(0, 6)}…${task.assigned_agent.slice(-4)}` : '-'} />
+        <PanelRow
+          label="Assigned agent"
+          value={
+            task.assigned_agent
+              ? `${assignedAgentName ? `${assignedAgentName} · ` : ''}${task.assigned_agent.slice(0, 6)}…${task.assigned_agent.slice(-4)}`
+              : '-'
+          }
+        />
         {task.assigned_agent && (
           <PanelRow label="Agent gets paid" value={`${task.assigned_price} GEN`} />
         )}

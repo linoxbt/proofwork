@@ -45,6 +45,7 @@ const AgentsBoard = () => {
 
   const panel = agentInfo?.active ? (
     <PanelSection title="Your Agent" defaultOpen>
+      <PanelRow label="Name" value={agentInfo.name} />
       <PanelRow label="Capabilities" value={agentInfo.capabilities} />
       <PanelRow label="Reputation" value={agentInfo.reputation} />
       <PanelRow label="Stake" value={`${agentInfo.stake} GEN`} />
@@ -100,7 +101,7 @@ const AgentsBoard = () => {
     >
       <div className="max-w-4xl mx-auto p-4 space-y-3">
         {isConnected && (
-          <CodeCard title={agentInfo?.active ? 'You are a registered agent' : 'Not registered as an agent'} variant={agentInfo?.active ? 'default' : 'blue'}>
+          <CodeCard title={agentInfo?.active ? `You are a registered agent - ${agentInfo.name}` : 'Not registered as an agent'} variant={agentInfo?.active ? 'default' : 'blue'}>
             <div className="flex items-center justify-between gap-3">
               {agentInfo?.active ? (
                 <div className="text-sm text-foreground/85">

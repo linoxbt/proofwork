@@ -41,10 +41,10 @@ def _warp_now(direct_vm):
     direct_vm.warp("2023-11-14T22:13:20Z")  # NOW
 
 
-def _register(direct_vm, registry, agent, capabilities="Backend"):
+def _register(direct_vm, registry, agent, capabilities="Backend", name="Test-Agent"):
     direct_vm.sender = agent
     direct_vm.value = 10**18
-    registry.register_agent(capabilities)
+    registry.register_agent(name, capabilities)
     direct_vm.value = 0
 
 
@@ -67,7 +67,7 @@ def test_register_agent_requires_min_stake(direct_vm, direct_deploy, direct_alic
     registry = direct_deploy("contracts/agent_registry.py")
     direct_vm.value = int(0.5 * 10**18)
     with pytest.raises(AssertionError, match=re.escape("Stake below the minimum")):
-        registry.register_agent("Backend")
+        registry.register_agent("Tester", "Backend")
     direct_vm.value = 0
 
 
@@ -82,10 +82,11 @@ def test_register_agent_succeeds_and_dedupes(direct_vm, direct_deploy, direct_al
     assert info["reputation"] == 100
     assert info["stake"] == 10**18
     assert info["active_tasks"] == 0
+    assert info["name"] == "Test-Agent"
 
     direct_vm.sender = direct_alice
     with pytest.raises(AssertionError, match=re.escape("Already registered")):
-        registry.register_agent("Backend")
+        registry.register_agent("Test-Agent", "Backend")
 
 
 def test_go_offline_then_withdraw_refunds_stake(direct_vm, direct_deploy, direct_alice):

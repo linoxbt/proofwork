@@ -79,7 +79,7 @@ async function maybeRegister(id: RunningIdentity) {
     return;
   }
   console.log(`[${id.persona.name} ${short(id.address)}] registering with ${MIN_STAKE_GEN} GEN stake...`);
-  await registerAgent(id.client, NETWORK, id.persona.capabilities, MIN_STAKE_GEN);
+  await registerAgent(id.client, NETWORK, id.persona.name, id.persona.capabilities, MIN_STAKE_GEN);
   console.log(`[${id.persona.name} ${short(id.address)}] registered.`);
 }
 

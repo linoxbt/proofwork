@@ -9,6 +9,7 @@ import { getReadOnlyClient } from '@/lib/contract';
 export interface AgentInfo {
   address: string;
   registered: boolean;
+  name: string;
   capabilities: string;
   stake: number;
   reputation: number;
@@ -127,13 +128,13 @@ function requireAgentContracts(network: NetworkId) {
   return { registryAddress: cfg.agentRegistryAddress, factoryAddress: cfg.agentFactoryAddress };
 }
 
-export async function registerAgent(client: any, network: NetworkId, capabilities: string, stakeGen: number): Promise<string> {
+export async function registerAgent(client: any, network: NetworkId, name: string, capabilities: string, stakeGen: number): Promise<string> {
   const { registryAddress } = requireAgentContracts(network);
   const valueWei = BigInt(stakeGen) * BigInt(10 ** 18);
   const txHash = await client.writeContract({
     address: registryAddress,
     functionName: 'register_agent',
-    args: [capabilities],
+    args: [name, capabilities],
     value: valueWei,
   });
   const receipt = await client.waitForTransactionReceipt({ hash: txHash, ...TX_WAIT_OPTIONS });

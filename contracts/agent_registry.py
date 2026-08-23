@@ -45,6 +45,7 @@ class AgentRegistry(gl.Contract):
     task_factory: str  # AgentTaskFactory address - only caller allowed to record outcomes
     agent_addresses: DynArray[str]
     agent_registered: TreeMap[str, bool]  # true forever once ever registered
+    agent_name: TreeMap[str, str]  # matches Polaris's register(agentId, stake, name, capabilities)
     agent_capabilities: TreeMap[str, str]
     agent_stake: TreeMap[str, u256]
     agent_reputation: TreeMap[str, u256]
@@ -63,14 +64,16 @@ class AgentRegistry(gl.Contract):
         self.task_factory = factory_address
 
     @gl.public.write.payable
-    def register_agent(self, capabilities: str) -> None:
+    def register_agent(self, name: str, capabilities: str) -> None:
         caller = str(gl.message.sender_address)
         assert not self.agent_registered.get(caller, False), "Already registered"
         assert gl.message.value >= MIN_STAKE_ATTO, "Stake below the minimum"
+        assert name.strip() != "", "Name cannot be empty"
         assert capabilities.strip() != "", "Capabilities cannot be empty"
 
         self.agent_addresses.append(caller)
         self.agent_registered[caller] = True
+        self.agent_name[caller] = name
         self.agent_capabilities[caller] = capabilities
         self.agent_stake[caller] = gl.message.value
         self.agent_reputation[caller] = REPUTATION_START
@@ -154,6 +157,7 @@ class AgentRegistry(gl.Contract):
         return {
             "address": agent_address,
             "registered": self.agent_registered.get(agent_address, False),
+            "name": self.agent_name.get(agent_address, ""),
             "capabilities": self.agent_capabilities.get(agent_address, ""),
             "stake": self.agent_stake.get(agent_address, u256(0)),
             "reputation": self.agent_reputation.get(agent_address, u256(0)),
