@@ -54,14 +54,18 @@ export interface PlatformIndex {
     deadlineMs: number;
     biddingDeadlineMs: number;
     bidCount: number;
+    bids: Array<{ agent: string; priceGen: number; etaHours: number }>;
     status: string;
     assignedAgent: string | null;
     assignedPriceGen: number;
+    submissionUrl: string;
+    submissionNote: string;
     createdAtMs: number;
     verifiedAtMs: number | null;
     disputeCount: number;
     escrowedGen: number;
     escrowReleased: boolean;
+    releaseEligible: boolean;
   }>;
   series: Array<{
     id: number;
@@ -74,6 +78,7 @@ export interface PlatformIndex {
     awarded: boolean;
     biddingDeadlineMs: number;
     bidCount: number;
+    bids: Array<{ agent: string; priceGen: number; etaHours: number }>;
     committedAgent: string | null;
     committedPriceGen: number;
   }>;

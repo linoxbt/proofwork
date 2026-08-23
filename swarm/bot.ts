@@ -8,10 +8,12 @@ import {
   getAllAgents,
   getAllAgentTaskAddresses,
   getAgentTaskState,
+  getAgentTaskBids,
   getAgentTaskEscrowStatus,
   getAttestation,
   getSeriesCount,
   getSeries,
+  getSeriesBids,
   getSeriesForTask,
   placeBid,
   closeBiddingAndAssign,
@@ -40,6 +42,7 @@ const WORK_MIN_MS = 60_000;
 const WORK_MAX_MS = 180_000;
 const DELEGATE_MARGIN = 0.8; // fraction of the winning price passed to a delegated peer
 const TERMINAL = new Set(['verified', 'rejected', 'cancelled', 'expired']);
+const RELEASE_WINDOW_SECONDS = 86400; // matches AgentTaskFactory.RELEASE_WINDOW_SECONDS
 
 interface RunningIdentity extends Identity {
   client: ReturnType<typeof buildClient>;
@@ -172,9 +175,12 @@ async function delegate(id: RunningIdentity, addr: string, state: AgentTaskState
 // canonical current state, so this is a direct read + the same TTL-cached
 // single-flight pattern (see server.ts), no event replay needed.
 async function buildIndex(
+  readClient: any,
   taskStates: [string, AgentTaskState][],
   seriesStates: [number, RecurringSeries][],
 ): Promise<PlatformIndex> {
+  const now = Math.floor(Date.now() / 1000);
+
   const agentAddresses = await getAllAgents(NETWORK);
   const agents = await Promise.all(
     agentAddresses.map(async (address) => {
@@ -194,7 +200,16 @@ async function buildIndex(
 
   const tasks = await Promise.all(
     taskStates.map(async ([address, state]) => {
-      const escrow = await getAgentTaskEscrowStatus(NETWORK, address);
+      const [escrow, rawBids] = await Promise.all([
+        getAgentTaskEscrowStatus(NETWORK, address),
+        getAgentTaskBids(readClient, address),
+      ]);
+      const releaseEligible =
+        !escrow.released &&
+        TERMINAL.has(state.status) &&
+        (state.status === 'cancelled' ||
+          state.status === 'expired' ||
+          (state.verified_at > 0 && now >= state.verified_at + RELEASE_WINDOW_SECONDS));
       return {
         address,
         ref: address.slice(2, 10).toUpperCase(),
@@ -207,33 +222,43 @@ async function buildIndex(
         deadlineMs: state.deadline * 1000,
         biddingDeadlineMs: state.bidding_deadline * 1000,
         bidCount: state.bid_count,
+        bids: rawBids.map((b) => ({ agent: b.agent, priceGen: b.price, etaHours: b.eta_hours })),
         status: state.status,
         assignedAgent: state.assigned_agent || null,
         assignedPriceGen: state.assigned_price,
+        submissionUrl: state.submission_url,
+        submissionNote: state.submission_note,
         createdAtMs: state.created_at * 1000,
         verifiedAtMs: state.verified_at ? state.verified_at * 1000 : null,
         disputeCount: state.dispute_count,
         escrowedGen: escrow.lockedAmount,
         escrowReleased: escrow.released,
+        releaseEligible,
       };
     }),
   );
   tasks.sort((a, b) => b.createdAtMs - a.createdAtMs);
 
-  const series = seriesStates.map(([id, s]) => ({
-    id,
-    requester: s.requester,
-    title: s.title,
-    capabilityRequired: s.capability_required,
-    budgetPerOccurrenceGen: s.budget_per_occurrence,
-    remaining: s.remaining,
-    active: s.active,
-    awarded: s.awarded,
-    biddingDeadlineMs: s.bidding_deadline * 1000,
-    bidCount: s.bid_count,
-    committedAgent: s.committed_agent || null,
-    committedPriceGen: s.committed_price,
-  }));
+  const series = await Promise.all(
+    seriesStates.map(async ([id, s]) => {
+      const rawBids = s.awarded ? [] : await getSeriesBids(NETWORK, id);
+      return {
+        id,
+        requester: s.requester,
+        title: s.title,
+        capabilityRequired: s.capability_required,
+        budgetPerOccurrenceGen: s.budget_per_occurrence,
+        remaining: s.remaining,
+        active: s.active,
+        awarded: s.awarded,
+        biddingDeadlineMs: s.bidding_deadline * 1000,
+        bidCount: s.bid_count,
+        bids: rawBids.map((b) => ({ agent: b.agent, priceGen: b.price, etaHours: b.eta_hours })),
+        committedAgent: s.committed_agent || null,
+        committedPriceGen: s.committed_price,
+      };
+    }),
+  );
 
   const totals = {
     totalTasks: tasks.length,
@@ -401,7 +426,7 @@ async function runCycle(
     }
   }
 
-  return buildIndex(taskStates, seriesStates);
+  return buildIndex(readClient, taskStates, seriesStates);
 }
 
 async function main() {

@@ -71,6 +71,13 @@ export function renderDashboard(index: PlatformIndex | null, status: SwarmStatus
     )
     .join('');
 
+  const bidList = (bids: Array<{ agent: string; priceGen: number; etaHours: number }>) =>
+    bids.length
+      ? `<ul class="bidlist">${bids
+          .map((b) => `<li><span class="mono">${short(b.agent)}</span> &middot; ${b.priceGen} GEN &middot; ${b.etaHours}h</li>`)
+          .join('')}</ul>`
+      : '<span class="sub">no bids</span>';
+
   const taskRows = (index?.tasks ?? [])
     .map(
       (t) => `
@@ -79,9 +86,31 @@ export function renderDashboard(index: PlatformIndex | null, status: SwarmStatus
           <td>${statusBadge(t.status)}</td>
           <td>${t.budgetGen} GEN</td>
           <td>${t.assignedAgent ? `<span class="mono">${short(t.assignedAgent)}</span> @ ${t.assignedPriceGen} GEN` : '-'}</td>
-          <td>${t.bidCount}</td>
-          <td>${t.escrowedGen} GEN${t.escrowReleased ? ' (released)' : ''}</td>
+          <td>${bidList(t.bids)}</td>
+          <td>${t.submissionUrl ? `<a href="${esc(t.submissionUrl)}" target="_blank">view</a>${t.submissionNote ? `<div class="sub">${esc(t.submissionNote)}</div>` : ''}` : '<span class="sub">-</span>'}</td>
           <td class="sub">${timeAgo(t.createdAtMs)}</td>
+        </tr>`,
+    )
+    .join('');
+
+  const terminalTasks = (index?.tasks ?? []).filter((t) => ['verified', 'rejected', 'cancelled', 'expired'].includes(t.status));
+  const settlementRows = terminalTasks
+    .map(
+      (t) => `
+        <tr>
+          <td>${esc(t.title)}<div class="sub mono">${t.ref}</div></td>
+          <td>${statusBadge(t.status)}</td>
+          <td>${t.status === 'verified' ? `agent (${short(t.assignedAgent || '')})` : 'requester'} &middot; ${t.escrowedGen} GEN</td>
+          <td>
+            ${
+              t.escrowReleased
+                ? '<span class="dot dot-green"></span> released'
+                : t.releaseEligible
+                  ? '<span class="dot dot-amber"></span> eligible now'
+                  : `<span class="dot dot-gray"></span> locked${t.verifiedAtMs ? ` until ${new Date(t.verifiedAtMs + 86400000).toLocaleString()}` : ''}`
+            }
+          </td>
+          <td class="sub">${timeAgo(t.verifiedAtMs ?? t.createdAtMs)}</td>
         </tr>`,
     )
     .join('');
@@ -95,7 +124,7 @@ export function renderDashboard(index: PlatformIndex | null, status: SwarmStatus
           <td>${s.budgetPerOccurrenceGen} GEN/occurrence</td>
           <td>${s.remaining}</td>
           <td>${s.committedAgent ? `<span class="mono">${short(s.committedAgent)}</span> @ ${s.committedPriceGen} GEN` : '-'}</td>
-          <td>${s.bidCount}</td>
+          <td>${bidList(s.bids)}</td>
         </tr>`,
     )
     .join('');
@@ -134,6 +163,8 @@ export function renderDashboard(index: PlatformIndex | null, status: SwarmStatus
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
   .dot-green { background: #22c55e; } .dot-amber { background: #f59e0b; } .dot-gray { background: #6b7280; }
   .empty { color: #6b7280; padding: 16px; text-align: center; }
+  .bidlist { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+  .bidlist li { padding: 1px 0; }
 </style>
 </head>
 <body>
@@ -171,8 +202,14 @@ export function renderDashboard(index: PlatformIndex | null, status: SwarmStatus
 
   <h2>Tasks (${index?.tasks.length ?? 0})</h2>
   <table>
-    <thead><tr><th>Task</th><th>Status</th><th>Budget</th><th>Assigned</th><th>Bids</th><th>Escrow</th><th>Posted</th></tr></thead>
+    <thead><tr><th>Task</th><th>Status</th><th>Budget</th><th>Assigned</th><th>Bids</th><th>Submission</th><th>Posted</th></tr></thead>
     <tbody>${taskRows || '<tr><td colspan="7" class="empty">no tasks yet</td></tr>'}</tbody>
+  </table>
+
+  <h2>Settlements (${terminalTasks.length})</h2>
+  <table>
+    <thead><tr><th>Task</th><th>Outcome</th><th>Payable</th><th>Escrow</th><th>Decided</th></tr></thead>
+    <tbody>${settlementRows || '<tr><td colspan="5" class="empty">nothing settled yet</td></tr>'}</tbody>
   </table>
 
   <h2>Recurring Series (${index?.series.length ?? 0})</h2>
