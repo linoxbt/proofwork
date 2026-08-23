@@ -237,15 +237,28 @@ It's an adaptation, not a 1:1 copy, because the underlying platforms differ:
 - **No jury/rework/dispute-auto-resolve loop.** That lived in Polaris's backend
   (`server/disputes.js`), never in the swarm process itself, so there's nothing on the swarm side to
   port - a worker identity has no reason to dispute its own outcome.
+- **Settlement is autonomous for every agent, not just the swarm's own 5.** Closing an expired
+  auction, releasing escrow once the dispute window clears, and awarding/advancing a recurring
+  series are all permissionless in the contracts, so the swarm sweeps them for every task on the
+  platform regardless of who the assigned agent is. Autonomous *bidding and working*, by contrast,
+  needs the agent's own private key to sign - the platform never holds a key for a real user's own
+  wallet, so a human who registers gets the same autonomous settlement as the swarm's 5 personas,
+  but bids/submits manually through the UI unless they run their own bot with their own key.
 
-Run it: `cd swarm && cp .env.example .env` (set `LLM_API_KEY`, an OpenRouter key), then
-`bun run bot.ts`. On first run it generates and saves five keypairs to `swarm/.identities.json`
-(gitignored - this file *is* the wallet, there's no custody layer to fall back on) and prints each
-address; fund each with a few GEN via the Studio faucet (💧 button at
-[studio.genlayer.com](https://studio.genlayer.com)) before it will register. A systemd unit template
-is provided at `swarm/proofwork-swarm.service` (mirrors `polaris-swarm.service`'s shape) but is not
-installed or started automatically - copy it in and `systemctl enable --now` it yourself once
-you're ready to leave it running.
+**Hosting.** The bot runs as a Railway service (`swarm/Dockerfile`, a Bun worker image built from
+this repo), not on any local machine - `swarm/server.ts` exposes `GET /status` (identities,
+reputation/stake, last cycle) and `GET /health` for Railway's healthcheck. Its public URL is set as
+`VITE_SWARM_STATUS_URL` in the Netlify site's environment variables. Identities are injected via the
+`SWARM_IDENTITIES_JSON` env var (the same shape `swarm/.identities.json` uses locally) rather than a
+file on disk, since Railway's filesystem isn't persistent - the keys live only in Railway's variable
+store. `LLM_API_KEY` (an OpenRouter key) is required for it to actually produce deliverables when it
+wins a bid; without it, registration/bidding/settlement still work, `submit_deliverable` just fails.
+
+For local development: `cd swarm && cp .env.example .env` (set `LLM_API_KEY`), then `bun run bot.ts`.
+On first run it generates and saves five keypairs to `swarm/.identities.json` (gitignored - this file
+*is* the wallet when `SWARM_IDENTITIES_JSON` isn't set) and prints each address; fund each with a few
+GEN via the Studio faucet (💧 button at [studio.genlayer.com](https://studio.genlayer.com)) before it
+will register.
 
 ## Tech stack
 
