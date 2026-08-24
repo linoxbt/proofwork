@@ -33,14 +33,16 @@ import { buildClient, buildReadOnlyClient, getBalanceWei, fmtGen, NETWORK } from
 import { produceDeliverable } from './deliverable';
 import { startStatusServer, type SwarmStatus, type PlatformIndex } from './server';
 
-// Studionet rate-limits to 500 req/hr per IP. Even after deduping redundant
-// calls, a zero-task cycle still costs ~8 calls (task/series counts, 5
-// identity refreshes, agent list) - at 30s that's already ~960/hr, over
-// budget before any real task volume. 60s keeps steady-state comfortably
-// under the limit; this still won't scale indefinitely as task count grows
-// (each open task adds ~3 more calls/cycle), matching the documented
-// "fine at demo scale" tradeoff for the full-poll approach.
-const POLL_INTERVAL_MS = 60_000;
+// Studionet rate-limits to 500 req/hr per IP. A zero-task cycle costs ~8
+// calls; each *active* (not-yet-fully-done) task adds ~3 more, tasks whose
+// bidding has closed drop to ~2 (bids frozen and cached), and fully done
+// tasks (terminal + escrow released) cost 0 forever (see doneTaskCache/
+// closedBidsCache) - so steady-state cost now tracks active task volume, not
+// total platform history. 120s keeps a handful of concurrently-active tasks
+// comfortably under budget; this can still be tripped by a burst of many
+// simultaneously-open tasks, matching the documented "fine at demo scale"
+// tradeoff for the full-poll approach.
+const POLL_INTERVAL_MS = 120_000;
 const MAX_BIDS = 3; // per-persona open-bid cap, mirrors Polaris's SWARM_MAX_BIDS
 const MAX_INFLIGHT = 1; // per-persona concurrent work capacity
 const REPUTATION_FLOOR = 70; // mirrors AgentTask.REPUTATION_FLOOR
@@ -61,6 +63,15 @@ interface RunningIdentity extends Identity {
 }
 
 const seriesMembershipCache = new Map<string, number>();
+
+// A task's bids are immutable once bidding closes (status leaves 'open'), and
+// nothing about it will ever change again once it's terminal AND its escrow
+// is released - so both are cached permanently rather than re-fetched every
+// cycle forever. Without this, per-cycle RPC cost grows with the platform's
+// entire task history instead of just its currently-active tasks, which is
+// what actually tripped the 500req/hr limit once real tasks existed.
+const closedBidsCache = new Map<string, { agent: string; price: number; eta_hours: number }[]>();
+const doneTaskCache = new Map<string, PlatformIndex['tasks'][number]>();
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -212,17 +223,21 @@ async function buildIndex(
     }),
   );
 
-  const tasks = await Promise.all(
+  const freshlyBuilt = await Promise.all(
     taskStates.map(async ([address, state]) => {
       const escrow = escrowByTask.get(address)!;
-      const rawBids = await getAgentTaskBids(readClient, address);
+      let rawBids = closedBidsCache.get(address);
+      if (!rawBids) {
+        rawBids = await getAgentTaskBids(readClient, address);
+        if (state.status !== 'open') closedBidsCache.set(address, rawBids);
+      }
       const releaseEligible =
         !escrow.released &&
         TERMINAL.has(state.status) &&
         (state.status === 'cancelled' ||
           state.status === 'expired' ||
           (state.verified_at > 0 && now >= state.verified_at + RELEASE_WINDOW_SECONDS));
-      return {
+      const built = {
         address,
         ref: address.slice(2, 10).toUpperCase(),
         requester: state.requester,
@@ -247,7 +262,14 @@ async function buildIndex(
         escrowReleased: escrow.released,
         releaseEligible,
       };
+      // Fully done - cache it forever and skip it entirely on future cycles
+      // (see the doneAddrs split at the top of runCycle).
+      if (TERMINAL.has(state.status) && escrow.released) doneTaskCache.set(address, built);
+      return built;
     }),
+  );
+  const tasks = [...freshlyBuilt, ...doneTaskCache.values()].filter(
+    (t, i, arr) => arr.findIndex((x) => x.address === t.address) === i,
   );
   tasks.sort((a, b) => b.createdAtMs - a.createdAtMs);
 
@@ -294,21 +316,26 @@ async function runCycle(
 
   const [taskAddrs, seriesCount] = await Promise.all([getAllAgentTaskAddresses(NETWORK), getSeriesCount(NETWORK)]);
 
+  // Tasks already fully done (terminal + escrow released) never change again -
+  // skip fetching them entirely. Every other phase below (registration,
+  // close/award, settlement sweep, bidding) only needs the live ones anyway.
+  const liveAddrs = taskAddrs.filter((a) => !doneTaskCache.has(a));
+
   const taskStates: [string, AgentTaskState][] = await Promise.all(
-    taskAddrs.map(async (addr) => [addr, await getAgentTaskState(readClient, addr)] as [string, AgentTaskState]),
+    liveAddrs.map(async (addr) => [addr, await getAgentTaskState(readClient, addr)] as [string, AgentTaskState]),
   );
   const seriesIds = Array.from({ length: seriesCount }, (_, i) => i + 1);
   const seriesStates: [number, RecurringSeries][] = await Promise.all(
     seriesIds.map(async (id) => [id, await getSeries(NETWORK, id)] as [number, RecurringSeries]),
   );
 
-  await Promise.all(taskAddrs.filter((a) => !seriesMembershipCache.has(a)).map((a) => seriesIdForTask(a)));
+  await Promise.all(liveAddrs.filter((a) => !seriesMembershipCache.has(a)).map((a) => seriesIdForTask(a)));
 
   // Escrow status per task, fetched once and reused by both the settlement
   // sweep below and buildIndex - was previously fetched twice per task.
   const escrowByTask = new Map<string, { lockedAmount: number; released: boolean }>();
   await Promise.all(
-    taskAddrs.map(async (addr) => {
+    liveAddrs.map(async (addr) => {
       escrowByTask.set(addr, await getAgentTaskEscrowStatus(NETWORK, addr));
     }),
   );
@@ -370,11 +397,21 @@ async function runCycle(
     if (!series.active || !series.awarded) continue;
     if (now < series.next_advance_at) continue;
     const current = latestTaskForSeries(sid, taskStates);
-    if (!current) continue;
-    const [addr, state] = current;
-    if (!TERMINAL.has(state.status)) continue;
-    const escrow = escrowByTask.get(addr)!;
-    if (!escrow.released) continue;
+    let addr: string;
+    if (current) {
+      const [liveAddr, state] = current;
+      if (!TERMINAL.has(state.status)) continue;
+      if (!escrowByTask.get(liveAddr)!.released) continue;
+      addr = liveAddr;
+    } else {
+      // The current occurrence may already be fully done and skipped from
+      // this cycle's live fetch entirely - fall back to the done-task cache,
+      // which by construction is always terminal + released.
+      const doneMatches = [...doneTaskCache.entries()].filter(([a]) => seriesMembershipCache.get(a) === sid);
+      if (!doneMatches.length) continue;
+      doneMatches.sort((a, b) => b[1].createdAtMs - a[1].createdAtMs);
+      addr = doneMatches[0][0];
+    }
     try {
       await advanceRecurringSeries(closerClient, NETWORK, addr);
       console.log(`advanced series #${sid} "${series.title}"`);
